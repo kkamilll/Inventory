@@ -79,25 +79,46 @@ Dedicated permissions and tailored dashboards for three system roles:
    ```
    Edit `.env` to customize the port, database URI, JWT secret, or SMTP configuration.
 
-4. Start the application:
+4. *(Optional)* Seed demo data or start with a clean database:
    ```bash
-   npm start
+   # Populate with realistic demo data (7 devices, leasing contracts, loans, users)
+   npm run seed
+
+   # Or reset to an empty database (retains only the admin account)
+   npm run seed:clean
    ```
 
-5. Access the web interface:
+5. Start the application:
+   ```bash
+   npm run dev
+   # or npm start
+   ```
+
+6. Access the web interface:
    Open your browser and navigate to `http://localhost:3000`.
 
 ---
 
 ## Default Accounts
 
-During the initial startup, the system seeds default test accounts for evaluation:
+When seeded with `npm run seed`, the system includes pre-configured test accounts for evaluation:
 
 | Role | Email | Password | Permissions |
 |---|---|---|---|
 | **IT Administrator** | `admin@firma.pl` | `admin123` | Full administrative control |
 | **IT Worker** | `it@firma.pl` | `it123456` | Hardware, loans, and transfers |
 | **Accountant** | `ksiegowosc@firma.pl` | `ksieg123` | Lease contracts and cost reconciliation |
+
+When running with an empty database (`npm run seed:clean` or fresh install), the system ensures the primary **IT Administrator** account (`admin@firma.pl` / `admin123`) is ready for first login so you can add your own devices from scratch.
+
+---
+
+## Database Commands
+
+| Command | Description |
+|---|---|
+| `npm run seed` | Resets and populates the database with full demo data (devices, loans, leasing info, 3 user roles). |
+| `npm run seed:clean` | Wipes all devices, loans, and activities, leaving only the clean administrator account. |
 
 ---
 

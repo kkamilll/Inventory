@@ -225,6 +225,21 @@ const db = {
         return deleted;
       }
       return null;
+    },
+
+    deleteMany: async (query = {}) => {
+      if (!useJsonDb) {
+        return await Device.deleteMany(query);
+      }
+      const beforeCount = jsonDbData.devices.length;
+      jsonDbData.devices = jsonDbData.devices.filter(d => {
+        for (let key in query) {
+          if (d[key] === query[key]) return false;
+        }
+        return true;
+      });
+      saveJsonDb();
+      return { deletedCount: beforeCount - jsonDbData.devices.length };
     }
   },
 

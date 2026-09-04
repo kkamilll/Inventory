@@ -53,137 +53,12 @@ function requireAdminOrIT(req, res, next) {
   next();
 }
 
-// Mock data definitions for seeding
-const defaultDevices = [
-  {
-    assetTag: 'LPT-001',
-    type: 'laptop',
-    brand: 'Lenovo',
-    model: 'ThinkPad T14 Gen 4',
-    serialNumber: 'L3N987654321',
-    location: 'Warszawa',
-    status: 'available',
-    specs: { cpu: 'Intel Core i7-1360P', ram: '32 GB', ssd: '1 TB SSD' },
-    notes: 'Stan idealny.',
-    leaseProvider: 'mLeasing',
-    expectedLeaseCost: 150,
-    actualLeaseCost: 150,
-    deviceValue: 4500,
-    leaseStartDate: '2024-12-01',
-    leaseEndDate: '2027-12-01'
-  },
-  {
-    assetTag: 'LPT-002',
-    type: 'laptop',
-    brand: 'Apple',
-    model: 'MacBook Pro 14" M3',
-    serialNumber: 'C02F87654321',
-    location: 'Kraków',
-    status: 'loaned',
-    specs: { cpu: 'Apple M3 Pro (12-core)', ram: '18 GB', ssd: '512 GB SSD' },
-    notes: 'Wydany z ładowarką i etui.',
-    leaseProvider: 'Grenke',
-    expectedLeaseCost: 200,
-    actualLeaseCost: 250, // Cost discrepancy!
-    deviceValue: 6000,
-    leaseStartDate: '2024-05-01',
-    leaseEndDate: '2027-05-01'
-  },
-  {
-    assetTag: 'LPT-003',
-    type: 'laptop',
-    brand: 'Dell',
-    model: 'Latitude 5440',
-    serialNumber: 'DELL9876543',
-    location: 'Warszawa',
-    status: 'maintenance',
-    specs: { cpu: 'Intel Core i5-1345U', ram: '16 GB', ssd: '512 GB SSD' },
-    notes: 'Zgłoszone zalanie klawiatury. Oczekuje na serwis autoryzowany.',
-    leaseProvider: 'Grenke',
-    expectedLeaseCost: 130,
-    actualLeaseCost: 130,
-    deviceValue: 3800,
-    leaseStartDate: '2024-06-01',
-    leaseEndDate: '2027-06-01'
-  },
-  {
-    assetTag: 'LPT-004',
-    type: 'laptop',
-    brand: 'HP',
-    model: 'EliteBook 840 G10',
-    serialNumber: 'HP5544332211',
-    location: 'Kraków',
-    status: 'available',
-    specs: { cpu: 'Intel Core i7-1355U', ram: '16 GB', ssd: '512 GB SSD' },
-    notes: 'Nowa bateria wymieniona w czerwcu.',
-    leaseProvider: 'EFL',
-    expectedLeaseCost: 140,
-    actualLeaseCost: 145, // Cost discrepancy!
-    deviceValue: 4000,
-    leaseStartDate: '2024-07-01',
-    leaseEndDate: '2028-07-01'
-  },
-  {
-    assetTag: 'LPT-005',
-    type: 'laptop',
-    brand: 'Lenovo',
-    model: 'Legion 5 Pro',
-    serialNumber: 'L3N11223344',
-    location: 'Warszawa',
-    status: 'loaned',
-    specs: { cpu: 'AMD Ryzen 7 7840HS', ram: '32 GB', ssd: '1 TB SSD' },
-    notes: 'Przeznaczony dla działu R&D (projektowanie CAD/3D).',
-    leaseProvider: 'mLeasing',
-    expectedLeaseCost: 180,
-    actualLeaseCost: 180,
-    deviceValue: 5000,
-    leaseStartDate: '2024-08-01',
-    leaseEndDate: '2027-08-01'
-  },
-  {
-    assetTag: 'PC-001',
-    type: 'desktop',
-    brand: 'Apple',
-    model: 'Mac Studio M2 Max',
-    serialNumber: 'C02M99887766',
-    location: 'Warszawa',
-    status: 'available',
-    specs: { cpu: 'Apple M2 Max', ram: '32 GB', ssd: '1 TB SSD' },
-    notes: 'Używany przez wideo edytora.',
-    leaseProvider: 'Apple Financial',
-    expectedLeaseCost: 300,
-    actualLeaseCost: 300,
-    deviceValue: 9000,
-    leaseStartDate: '2024-01-01',
-    leaseEndDate: '2027-01-01'
-  },
-  {
-    assetTag: 'PC-002',
-    type: 'desktop',
-    brand: 'Dell',
-    model: 'OptiPlex 7010 SFF',
-    serialNumber: 'DELL1122334',
-    location: 'Kraków',
-    status: 'loaned',
-    specs: { cpu: 'Intel Core i7-13700', ram: '32 GB', ssd: '512 GB SSD' },
-    notes: 'Stanowisko stacjonarne na recepcji Kraków.',
-    leaseProvider: 'EFL',
-    expectedLeaseCost: 100,
-    actualLeaseCost: 100,
-    deviceValue: 3000,
-    leaseStartDate: '2023-03-15',
-    leaseEndDate: '2026-03-15'
-  }
-];
-
-async function seedDatabase() {
+// Ensure initial admin user exists so the system can be accessed out of the box
+async function ensureAdminExists() {
   try {
-    // 1. Seed Users
-    const users = await db.users.find();
-    const needsSeed = users.length === 0 || users.some(u => !u.password) || !users.some(u => u.email === 'it@firma.pl');
-    if (needsSeed) {
-      console.log('Seeding or resetting system users with hashed passwords...');
-      await db.users.deleteMany({});
+    const admins = await db.users.find({ role: 'admin' });
+    if (admins.length === 0) {
+      console.log('[Auth] Creating initial administrator account (admin@firma.pl)...');
       await db.users.create({
         name: 'Andrzej IT Admin',
         email: 'admin@firma.pl',
@@ -192,147 +67,10 @@ async function seedDatabase() {
         securityQuestion: 'Twoje pierwsze auto',
         securityAnswer: 'maluch'
       });
-      await db.users.create({
-        name: 'Piotr Nowak (IT)',
-        email: 'it@firma.pl',
-        password: 'it123456',
-        role: 'it',
-        securityQuestion: 'Imię pierwszego zwierzaka',
-        securityAnswer: 'burek'
-      });
-      await db.users.create({
-        name: 'Monika Lis (Księgowość)',
-        email: 'ksiegowosc@firma.pl',
-        password: 'ksieg123',
-        role: 'accountant',
-        securityQuestion: 'Miasto w którym się urodziłeś',
-        securityAnswer: 'wroclaw'
-      });
+      console.log('[Auth] Administrator account ready: admin@firma.pl / admin123');
     }
-
-    // 2. Seed Devices and Loans
-    const devices = await db.devices.find();
-    if (devices.length === 0) {
-      console.log('Database empty. Seeding initial mockup database...');
-      
-      const createdDevices = [];
-      for (const d of defaultDevices) {
-        const created = await db.devices.create(d);
-        createdDevices.push(created);
-      }
-
-      const devMap = {};
-      createdDevices.forEach(d => {
-        const id = d._id || d.id;
-        devMap[d.assetTag] = id;
-      });
-
-      const seededLoans = [
-        {
-          deviceId: devMap['LPT-002'],
-          device: devMap['LPT-002'],
-          employeeName: 'Anna Kowalska',
-          employeeEmail: 'anna.kowalska@firma.pl',
-          employeeDept: 'Marketing',
-          loanDate: '2026-05-10',
-          expectedReturnDate: '2026-11-10',
-          actualReturnDate: null,
-          status: 'active'
-        },
-        {
-          deviceId: devMap['LPT-005'],
-          device: devMap['LPT-005'],
-          employeeName: 'Jan Nowak',
-          employeeEmail: 'jan.nowak@firma.pl',
-          employeeDept: 'Badania i Rozwój (R&D)',
-          loanDate: '2026-06-01',
-          expectedReturnDate: '2026-09-01',
-          actualReturnDate: null,
-          status: 'active'
-        },
-        {
-          deviceId: devMap['PC-002'],
-          device: devMap['PC-002'],
-          employeeName: 'Katarzyna Wiśniewska',
-          employeeEmail: 'katarzyna.w@firma.pl',
-          employeeDept: 'Administracja',
-          loanDate: '2026-03-15',
-          expectedReturnDate: '2027-03-15',
-          actualReturnDate: null,
-          status: 'active'
-        },
-        {
-          deviceId: devMap['LPT-001'],
-          device: devMap['LPT-001'],
-          employeeName: 'Piotr Kowalski',
-          employeeEmail: 'piotr.k@firma.pl',
-          employeeDept: 'Sprzedaż',
-          loanDate: '2026-01-10',
-          expectedReturnDate: '2026-07-10',
-          actualReturnDate: '2026-06-30',
-          status: 'returned'
-        }
-      ];
-
-      for (const l of seededLoans) {
-        if (l.deviceId) {
-          await db.loans.create(l);
-        }
-      }
-      const seededActivities = [
-        { type: 'loan', title: 'Wypożyczono MacBook Pro 14" M3 (LPT-002)', user: 'Anna Kowalska', date: '2026-05-10 10:14' },
-        { type: 'loan', title: 'Wypożyczono Lenovo Legion 5 Pro (LPT-005)', user: 'Jan Nowak', date: '2026-06-01 09:30' },
-        { type: 'return', title: 'Zwrócono Lenovo ThinkPad T14 Gen 4 (LPT-001)', user: 'Piotr Kowalski', date: '2026-06-30 15:45' },
-        { type: 'maintenance', title: 'Przekazano Dell Latitude 5440 (LPT-003) do serwisu', user: 'Dział IT', date: '2026-07-01 11:20' }
-      ];
-
-      for (const act of seededActivities) {
-        await db.activities.create(act);
-      }
-
-      console.log('Mock database seeding successfully completed.');
-    } else {
-      // Backfill missing leasing data if existing records were created before leasing module
-      const needsLeasingBackfill = devices.some(d => d.expectedLeaseCost === undefined || d.actualLeaseCost === undefined || !d.leaseProvider);
-      if (needsLeasingBackfill) {
-        console.log('[Migration] Backfilling missing leasing data for existing devices...');
-        for (const dev of devices) {
-          const matchingDefault = defaultDevices.find(d => d.assetTag === dev.assetTag);
-          const update = {};
-          if (dev.expectedLeaseCost === undefined || dev.expectedLeaseCost === null) {
-            update.expectedLeaseCost = matchingDefault ? matchingDefault.expectedLeaseCost : 150;
-          }
-          if (dev.actualLeaseCost === undefined || dev.actualLeaseCost === null) {
-            update.actualLeaseCost = matchingDefault ? matchingDefault.actualLeaseCost : 150;
-          }
-          if (!dev.leaseProvider) {
-            update.leaseProvider = matchingDefault ? matchingDefault.leaseProvider : 'mLeasing';
-          }
-          if ((!dev.deviceValue || dev.deviceValue === 0) && matchingDefault) {
-            update.deviceValue = matchingDefault.deviceValue;
-          }
-          if (!dev.leaseStartDate && matchingDefault) {
-            update.leaseStartDate = matchingDefault.leaseStartDate;
-          }
-          if (!dev.leaseEndDate && matchingDefault) {
-            update.leaseEndDate = matchingDefault.leaseEndDate;
-          }
-          if (!dev.status && matchingDefault) {
-            update.status = matchingDefault.status;
-          }
-          if (dev.notes && dev.notes.includes('<img')) {
-            update.notes = matchingDefault ? matchingDefault.notes : 'Stan dobry.';
-          }
-
-          if (Object.keys(update).length > 0) {
-            await db.devices.findByIdAndUpdate(dev._id || dev.id, update);
-          }
-        }
-        console.log('[Migration] Leasing data successfully backfilled.');
-      }
-    }
-  } catch (error) {
-    console.error('Failed to seed database:', error);
+  } catch (err) {
+    console.error('[Auth Error] Could not initialize administrator:', err);
   }
 }
 
@@ -1261,7 +999,7 @@ function getLocalIpAddresses() {
 // Start Web Server
 app.listen(PORT, '0.0.0.0', async () => {
   await db.connectDb();
-  await seedDatabase();
+  await ensureAdminExists();
   console.log(`\nIT Lease Hub is running!`);
   console.log(`  Local access:   http://localhost:${PORT}`);
   
