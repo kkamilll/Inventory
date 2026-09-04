@@ -275,9 +275,10 @@ async function seedDatabase() {
       ];
 
       for (const l of seededLoans) {
-        await db.loans.create(l);
+        if (l.deviceId) {
+          await db.loans.create(l);
+        }
       }
-
       const seededActivities = [
         { type: 'loan', title: 'Wypożyczono MacBook Pro 14" M3 (LPT-002)', user: 'Anna Kowalska', date: '2026-05-10 10:14' },
         { type: 'loan', title: 'Wypożyczono Lenovo Legion 5 Pro (LPT-005)', user: 'Jan Nowak', date: '2026-06-01 09:30' },
@@ -290,6 +291,45 @@ async function seedDatabase() {
       }
 
       console.log('Mock database seeding successfully completed.');
+    } else {
+      // Backfill missing leasing data if existing records were created before leasing module
+      const needsLeasingBackfill = devices.some(d => d.expectedLeaseCost === undefined || d.actualLeaseCost === undefined || !d.leaseProvider);
+      if (needsLeasingBackfill) {
+        console.log('[Migration] Backfilling missing leasing data for existing devices...');
+        for (const dev of devices) {
+          const matchingDefault = defaultDevices.find(d => d.assetTag === dev.assetTag);
+          const update = {};
+          if (dev.expectedLeaseCost === undefined || dev.expectedLeaseCost === null) {
+            update.expectedLeaseCost = matchingDefault ? matchingDefault.expectedLeaseCost : 150;
+          }
+          if (dev.actualLeaseCost === undefined || dev.actualLeaseCost === null) {
+            update.actualLeaseCost = matchingDefault ? matchingDefault.actualLeaseCost : 150;
+          }
+          if (!dev.leaseProvider) {
+            update.leaseProvider = matchingDefault ? matchingDefault.leaseProvider : 'mLeasing';
+          }
+          if ((!dev.deviceValue || dev.deviceValue === 0) && matchingDefault) {
+            update.deviceValue = matchingDefault.deviceValue;
+          }
+          if (!dev.leaseStartDate && matchingDefault) {
+            update.leaseStartDate = matchingDefault.leaseStartDate;
+          }
+          if (!dev.leaseEndDate && matchingDefault) {
+            update.leaseEndDate = matchingDefault.leaseEndDate;
+          }
+          if (!dev.status && matchingDefault) {
+            update.status = matchingDefault.status;
+          }
+          if (dev.notes && dev.notes.includes('<img')) {
+            update.notes = matchingDefault ? matchingDefault.notes : 'Stan dobry.';
+          }
+
+          if (Object.keys(update).length > 0) {
+            await db.devices.findByIdAndUpdate(dev._id || dev.id, update);
+          }
+        }
+        console.log('[Migration] Leasing data successfully backfilled.');
+      }
     }
   } catch (error) {
     console.error('Failed to seed database:', error);
