@@ -7,11 +7,12 @@ const Device = require('./models/Device');
 const Loan = require('./models/Loan');
 const Activity = require('./models/Activity');
 const User = require('./models/User');
+const Office = require('./models/Office');
 
 const JSON_DB_FILE = path.join(__dirname, 'db.json');
 
 let useJsonDb = false;
-let jsonDbData = { devices: [], loans: [], activities: [], users: [] };
+let jsonDbData = { devices: [], loans: [], activities: [], users: [], offices: [] };
 
 function loadJsonDb() {
   if (fs.existsSync(JSON_DB_FILE)) {
@@ -21,7 +22,8 @@ function loadJsonDb() {
         devices: parsed.devices || [],
         loans: parsed.loans || [],
         activities: parsed.activities || [],
-        users: parsed.users || []
+        users: parsed.users || [],
+        offices: parsed.offices || []
       };
     } catch (err) {
       console.error('Error reading JSON DB file, initializing empty', err);
@@ -396,6 +398,117 @@ const db = {
       });
       saveJsonDb();
       return { deletedCount: beforeCount - jsonDbData.activities.length };
+    }
+  },
+
+  offices: {
+    find: async (query = {}) => {
+      if (!useJsonDb) {
+        return await Office.find(query).sort({ name: 1 }).lean();
+      }
+      return jsonDbData.offices.filter(o => {
+        for (let key in query) {
+          if (query[key] !== undefined && o[key] !== query[key]) {
+            return false;
+          }
+        }
+        return true;
+      }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    },
+
+    findOne: async (query = {}) => {
+      if (!useJsonDb) {
+        return await Office.findOne(query).lean();
+      }
+      return jsonDbData.offices.find(o => {
+        for (let key in query) {
+          if (query[key] !== undefined && o[key] !== query[key]) {
+            return false;
+          }
+        }
+        return true;
+      }) || null;
+    },
+
+    findById: async (id) => {
+      if (!useJsonDb) {
+        return await Office.findById(id).lean();
+      }
+      return jsonDbData.offices.find(o => o.id === id || o._id === id) || null;
+    },
+
+    create: async (officeData) => {
+      if (!useJsonDb) {
+        return await Office.create(officeData);
+      }
+      const newOffice = {
+        id: generateId(),
+        _id: generateId(),
+        ...officeData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      jsonDbData.offices.push(newOffice);
+      saveJsonDb();
+      return newOffice;
+    },
+
+    findByIdAndUpdate: async (id, updateData) => {
+      if (!useJsonDb) {
+        return await Office.findByIdAndUpdate(id, updateData, { new: true }).lean();
+      }
+      const officeIndex = jsonDbData.offices.findIndex(o => o.id === id || o._id === id);
+      if (officeIndex > -1) {
+        jsonDbData.offices[officeIndex] = {
+          ...jsonDbData.offices[officeIndex],
+          ...updateData,
+          updatedAt: new Date().toISOString()
+        };
+        saveJsonDb();
+        return jsonDbData.offices[officeIndex];
+      }
+      return null;
+    },
+
+    findByIdAndDelete: async (id) => {
+      if (!useJsonDb) {
+        return await Office.findByIdAndDelete(id).lean();
+      }
+      const officeIndex = jsonDbData.offices.findIndex(o => o.id === id || o._id === id);
+      if (officeIndex > -1) {
+        const deleted = jsonDbData.offices[officeIndex];
+        jsonDbData.offices.splice(officeIndex, 1);
+        saveJsonDb();
+        return deleted;
+      }
+      return null;
+    },
+
+    deleteMany: async (query = {}) => {
+      if (!useJsonDb) {
+        return await Office.deleteMany(query);
+      }
+      const beforeCount = jsonDbData.offices.length;
+      jsonDbData.offices = jsonDbData.offices.filter(o => {
+        for (let key in query) {
+          if (o[key] === query[key]) return false;
+        }
+        return true;
+      });
+      saveJsonDb();
+      return { deletedCount: beforeCount - jsonDbData.offices.length };
+    },
+
+    exists: async (query) => {
+      if (!useJsonDb) {
+        return await Office.exists(query);
+      }
+      return jsonDbData.offices.some(o => {
+        for (let key in query) {
+          if (o[key] === query[key]) return true;
+        }
+        return false;
+      });
     }
   }
 };

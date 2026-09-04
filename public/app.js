@@ -16,6 +16,9 @@ let state = {
     status: 'all'
   },
   currentDeviceEditId: null,
+  currentOfficeEditId: null,
+  currentTransferDeviceId: null,
+  offices: [],
   charts: {
     statusChart: null,
     locationChart: null
@@ -175,13 +178,51 @@ const API = {
     return data;
   },
 
-  transferDevice: async (id) => {
+  transferDevice: async (id, targetLocation) => {
     const res = await fetch(`/api/devices/${id}/transfer`, {
       method: 'POST',
-      headers: API.getHeaders()
+      headers: API.getHeaders(),
+      body: JSON.stringify({ targetLocation })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Błąd przesunięcia urządzenia.');
+    return data;
+  },
+
+  getOffices: async () => {
+    const res = await fetch('/api/offices', { headers: API.getHeaders() });
+    return await res.json();
+  },
+
+  addOffice: async (officeData) => {
+    const res = await fetch('/api/offices', {
+      method: 'POST',
+      headers: API.getHeaders(),
+      body: JSON.stringify(officeData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Błąd dodawania oddziału.');
+    return data;
+  },
+
+  updateOffice: async (id, officeData) => {
+    const res = await fetch(`/api/offices/${id}`, {
+      method: 'PUT',
+      headers: API.getHeaders(),
+      body: JSON.stringify(officeData)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Błąd aktualizacji oddziału.');
+    return data;
+  },
+
+  deleteOffice: async (id) => {
+    const res = await fetch(`/api/offices/${id}`, {
+      method: 'DELETE',
+      headers: API.getHeaders()
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Błąd usuwania oddziału.');
     return data;
   },
 
@@ -281,12 +322,12 @@ function canManageDevices() { return isAdmin() || isIT(); }
 const ROLE_CONFIG = {
   admin: {
     label: 'Administrator IT', color: 'var(--color-danger)',
-    nav: ['dashboard', 'inventory', 'loans', 'leasing', 'history'],
+    nav: ['dashboard', 'inventory', 'loans', 'leasing', 'history', 'offices'],
     startView: 'dashboard'
   },
   it: {
     label: 'Pracownik IT', color: 'var(--color-info)',
-    nav: ['dashboard', 'inventory', 'loans', 'history'],
+    nav: ['dashboard', 'inventory', 'loans', 'history', 'offices'],
     startView: 'dashboard'
   },
   accountant: {
@@ -320,6 +361,10 @@ function updatePermissions() {
   // "Dodaj Komputer" header button — only IT/Admin
   const addBtn = document.getElementById('add-device-btn');
   if (addBtn) addBtn.style.display = canManageDevices() ? 'inline-flex' : 'none';
+
+  // "Dodaj Nowy Oddział" button — only Admin
+  const addOfficeBtn = document.getElementById('add-office-btn');
+  if (addOfficeBtn) addOfficeBtn.style.display = isAdmin() ? 'inline-flex' : 'none';
 
   // Change password button (always visible for all)
   const chPassBtn = document.getElementById('change-pass-btn');
@@ -526,8 +571,8 @@ async function renderInventory() {
           <button class="btn btn-secondary btn-icon-only" onclick="openEditDeviceModal('${deviceIdStr}')" title="Edytuj dane">
             <i class="fas fa-edit"></i>
           </button>
-          ${canManage ? `<button class="btn btn-info btn-icon-only" onclick="transferDeviceLocation('${deviceIdStr}')" title="Przesuń do: ${device.location === 'Warszawa' ? 'Kraków' : 'Warszawa'}" ${isTransferDisabled}>
-            <i class="fas fa-exchange-alt"></i>
+          ${canManage ? `<button class="btn btn-info btn-icon-only" onclick="openTransferSelectModal('${deviceIdStr}')" title="Przesuń do innego oddziału" ${isTransferDisabled}>
+            <i class="fas fa-truck-fast"></i>
           </button>` : ''}
           ${adminOnly ? `<button class="btn btn-danger btn-icon-only" onclick="confirmDeleteDevice('${deviceIdStr}', '${device.brand} ${device.model}', '${device.assetTag}')" title="Usuń komputer" ${isDeleteDisabled}>
             <i class="fas fa-trash-alt"></i>
@@ -849,16 +894,25 @@ function updateCharts(stats) {
     state.charts.locationChart.destroy();
   }
 
+  const locLabels = stats.byLocation && Object.keys(stats.byLocation).length > 0
+    ? Object.keys(stats.byLocation)
+    : ['Warszawa', 'Kraków'];
+  const locData = stats.byLocation && Object.keys(stats.byLocation).length > 0
+    ? Object.values(stats.byLocation)
+    : [stats.hqWarszawa || 0, stats.hqKrakow || 0];
+  const palette = ['#6366f1', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6'];
+  const bgColors = locLabels.map((_, i) => palette[i % palette.length]);
+
   state.charts.locationChart = new Chart(locCtx, {
     type: 'bar',
     data: {
-      labels: ['Warszawa', 'Kraków'],
+      labels: locLabels,
       datasets: [{
         label: 'Ilość komputerów',
-        data: [stats.hqWarszawa, stats.hqKrakow],
-        backgroundColor: ['#3b82f6', '#06b6d4'],
+        data: locData,
+        backgroundColor: bgColors,
         borderRadius: 8,
-        barThickness: 30
+        barThickness: Math.min(35, Math.max(16, Math.floor(180 / locLabels.length)))
       }]
     },
     options: {
@@ -890,7 +944,8 @@ function switchView(viewName) {
     inventory:  { h1: 'Baza Sprzętu IT', sub: 'Przeglądaj, filtruj i zarządzaj wszystkimi urządzeniami' },
     loans:      { h1: 'Aktywne Wypożyczenia', sub: 'Sprzęt aktualnie w posiadaniu pracowników firmy' },
     leasing:    { h1: 'Leasing i Koszty', sub: 'Analiza kosztów rat leasingowych i rozbieżności finansowych' },
-    history:    { h1: 'Historia i Dziennik Audytowy', sub: 'Pełny rejestr operacji oraz dziennik administracyjny IT' }
+    history:    { h1: 'Historia i Dziennik Audytowy', sub: 'Pełny rejestr operacji oraz dziennik administracyjny IT' },
+    offices:    { h1: 'Zarządzanie Oddziałami', sub: 'Konfiguracja lokalizacji biurowych, centrali i hubów leasingowych' }
   };
   const t = titles[viewName] || { h1: viewName, sub: '' };
   const titleEl = document.getElementById('view-title');
@@ -912,6 +967,7 @@ function switchView(viewName) {
   else if (viewName === 'loans')     renderLoans();
   else if (viewName === 'leasing')   renderLeasing();
   else if (viewName === 'history')   renderHistory();
+  else if (viewName === 'offices')   renderOfficesView();
 }
 
 // Modal Toggle Helpers
@@ -929,6 +985,7 @@ function openAddDeviceModal() {
   document.getElementById('device-modal-title').innerText = 'Dodaj Nowy Komputer';
   document.getElementById('device-form').reset();
   state.currentDeviceEditId = null;
+  populateLocationDropdowns();
   document.getElementById('dev-status').disabled = false;
   toggleModal('modal-device', 'open');
 }
@@ -939,6 +996,7 @@ async function openEditDeviceModal(deviceId) {
     state.currentDeviceEditId = deviceId;
     document.getElementById('device-modal-title').innerText = 'Edytuj Dane Komputera';
 
+    populateLocationDropdowns(device.location);
     document.getElementById('dev-asset').value = device.assetTag;
     document.getElementById('dev-type').value = device.type;
     document.getElementById('dev-brand').value = device.brand;
@@ -1090,28 +1148,56 @@ function confirmDeleteDevice(deviceId, name, tag) {
   toggleModal('modal-confirm-delete', 'open');
 }
 
-// Transfer location Trigger
-async function transferDeviceLocation(deviceId) {
+// Open Transfer Destination Picker Modal
+function openTransferSelectModal(deviceId) {
   const device = state.devices.find(d => (d._id || d.id) === deviceId);
   if (!device) return;
 
-  const currentLoc = device.location;
-  const targetLoc = currentLoc === 'Warszawa' ? 'Kraków' : 'Warszawa';
-  const deviceName = `${device.brand} ${device.model} (${device.assetTag})`;
+  state.currentTransferDeviceId = deviceId;
+  const devInfoEl = document.getElementById('transfer-select-device-info');
+  const curLocEl = document.getElementById('transfer-select-current-loc');
+  const targetSelect = document.getElementById('transfer-target-location');
 
-  showConfirm(
-    `Czy na pewno chcesz wysłać w transport urządzenie <strong>${deviceName}</strong> z oddziału <strong>${currentLoc}</strong> do oddziału <strong>${targetLoc}</strong>? Sprzęt przejdzie w status "W drodze" i będzie wymagał potwierdzenia odbioru na miejscu.`,
-    'Wysyłka sprzętu (Transfer)',
-    async () => {
-      try {
-        const res = await API.transferDevice(deviceId);
-        showToast(res.message, 'success');
-        renderInventory();
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
+  if (devInfoEl) devInfoEl.innerText = `${device.brand} ${device.model} (${device.assetTag})`;
+  if (curLocEl) curLocEl.innerText = device.location;
+
+  if (targetSelect) {
+    targetSelect.innerHTML = '';
+    const available = (state.offices || []).filter(o => o.name !== device.location);
+    if (available.length === 0) {
+      showToast('Brak innego zarejestrowanego oddziału w systemie. Dodaj nowy oddział w menu.', 'warning');
+      return;
     }
-  );
+    available.forEach(off => {
+      const opt = document.createElement('option');
+      opt.value = off.name;
+      opt.textContent = `${off.name}${off.isHq ? ' (Centrala/HQ)' : ''}`;
+      targetSelect.appendChild(opt);
+    });
+  }
+
+  toggleModal('modal-transfer-select', 'open');
+}
+
+// Handle Transfer Destination Form Submit
+async function handleConfirmTransferInitiate(event) {
+  event.preventDefault();
+  const targetSelect = document.getElementById('transfer-target-location');
+  const targetLoc = targetSelect ? targetSelect.value : null;
+
+  if (!targetLoc) {
+    showToast('Wybierz oddział docelowy.', 'warning');
+    return;
+  }
+
+  try {
+    const res = await API.transferDevice(state.currentTransferDeviceId, targetLoc);
+    showToast(res.message, 'success');
+    toggleModal('modal-transfer-select', 'close');
+    renderInventory();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
 }
 
 // Issue Loan Modal
@@ -1361,6 +1447,234 @@ async function handleConfirmTransferSubmit(event) {
   }
 }
 
+// ==========================================
+// Dynamic Office & Location Management
+// ==========================================
+
+// Load registered offices from API
+async function loadOffices() {
+  try {
+    const offices = await API.getOffices();
+    state.offices = offices;
+    const badge = document.getElementById('nav-count-offices');
+    if (badge) badge.textContent = offices.length;
+    renderLocationChips();
+    return offices;
+  } catch (err) {
+    console.error('Failed to load offices:', err);
+    return [];
+  }
+}
+
+// Render dynamic location filter chips in inventory
+function renderLocationChips() {
+  const container = document.getElementById('location-filters-container');
+  if (!container) return;
+
+  const currentLoc = state.filters.location || 'all';
+  let html = `
+    <button class="location-chip ${currentLoc === 'all' ? 'active' : ''}" data-location="all">
+      <i class="fas fa-globe"></i> Wszystkie oddziały
+    </button>
+  `;
+
+  (state.offices || []).forEach(off => {
+    const isActive = currentLoc === off.name ? 'active' : '';
+    const icon = off.isHq ? 'fa-building' : 'fa-map-pin';
+    html += `
+      <button class="location-chip ${isActive}" data-location="${off.name}">
+        <i class="fas ${icon}"></i> ${off.name}${off.isHq ? ' (HQ)' : ''}
+      </button>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.location-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      container.querySelectorAll('.location-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.filters.location = chip.getAttribute('data-location');
+      renderInventory();
+    });
+  });
+}
+
+// Populate location select dropdowns in device modals
+function populateLocationDropdowns(selectedLocation) {
+  const devLocationSelect = document.getElementById('dev-location');
+  if (!devLocationSelect) return;
+
+  devLocationSelect.innerHTML = '';
+  (state.offices || []).forEach(off => {
+    const opt = document.createElement('option');
+    opt.value = off.name;
+    opt.textContent = `${off.name}${off.isHq ? ' (Centrala / Główny magazyn)' : ''}`;
+    if (selectedLocation && selectedLocation === off.name) {
+      opt.selected = true;
+    }
+    devLocationSelect.appendChild(opt);
+  });
+}
+
+// Render Offices Management View Panel
+async function renderOfficesView() {
+  const tableBody = document.getElementById('offices-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Ładowanie oddziałów...</td></tr>';
+
+  try {
+    const [offices, devices] = await Promise.all([
+      API.getOffices(),
+      API.getDevices({ limit: 1000 })
+    ]);
+    state.offices = offices;
+
+    const badge = document.getElementById('nav-count-offices');
+    if (badge) badge.textContent = offices.length;
+
+    // Count devices per location
+    const counts = {};
+    devices.forEach(d => {
+      counts[d.location] = (counts[d.location] || 0) + 1;
+    });
+
+    if (offices.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--text-muted);"><i class="fas fa-building" style="font-size:2rem; display:block; margin-bottom:0.5rem; opacity:0.5;"></i>Brak zarejestrowanych oddziałów. Dodaj swój pierwszy oddział.</td></tr>`;
+      return;
+    }
+
+    const isAdmin = state.currentUser && state.currentUser.role === 'admin';
+    tableBody.innerHTML = '';
+
+    offices.forEach(off => {
+      const offId = off._id || off.id;
+      const devCount = counts[off.name] || 0;
+      const hqBadge = off.isHq
+        ? '<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); font-size:0.75rem;"><i class="fas fa-crown" style="margin-right:0.3rem;"></i>Centrala / HQ</span>'
+        : '<span class="badge" style="background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size:0.75rem;">Oddział lokalny</span>';
+
+      const actions = isAdmin ? `
+        <div style="display:flex; gap: 0.5rem;">
+          <button class="btn btn-secondary btn-icon-only" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="openEditOfficeModal('${offId}')" title="Edytuj oddział">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button class="btn btn-secondary btn-icon-only" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; color: var(--color-danger); border-color: rgba(239, 68, 68, 0.2);" onclick="handleDeleteOffice('${offId}', '${off.name.replace(/'/g, "\\'")}', ${devCount})" title="Usuń oddział">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+      ` : '<span style="color: var(--text-muted); font-size: 0.8rem;">Tylko odczyt</span>';
+
+      tableBody.innerHTML += `
+        <tr>
+          <td>
+            <div style="font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+              <i class="fas ${off.isHq ? 'fa-building' : 'fa-map-pin'}" style="color: var(--accent-indigo);"></i>
+              ${off.name}
+            </div>
+            ${off.address ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">${off.address}</div>` : ''}
+          </td>
+          <td><code style="background: rgba(255,255,255,0.06); padding: 0.2rem 0.4rem; border-radius: 4px; font-size: 0.8rem;">${off.code || '---'}</code></td>
+          <td>${hqBadge}</td>
+          <td>
+            <span class="badge badge-loaned" style="font-size: 0.8rem; font-weight: 600;">
+              ${devCount} ${devCount === 1 ? 'urządzenie' : (devCount >= 2 && devCount <= 4 ? 'urządzenia' : 'urządzeń')}
+            </span>
+          </td>
+          <td>${actions}</td>
+        </tr>
+      `;
+    });
+  } catch (err) {
+    showToast('Błąd pobierania oddziałów: ' + err.message, 'error');
+  }
+}
+
+// Open modal to add new office
+function openAddOfficeModal() {
+  state.currentOfficeEditId = null;
+  document.getElementById('office-modal-title').innerText = 'Dodaj Nowy Oddział';
+  document.getElementById('office-form').reset();
+  toggleModal('modal-office', 'open');
+}
+
+// Open modal to edit existing office
+function openEditOfficeModal(officeId) {
+  const office = (state.offices || []).find(o => (o._id || o.id) === officeId);
+  if (!office) return;
+
+  state.currentOfficeEditId = officeId;
+  document.getElementById('office-modal-title').innerText = 'Edytuj Dane Oddziału';
+  document.getElementById('office-name').value = office.name;
+  document.getElementById('office-code').value = office.code || '';
+  document.getElementById('office-address').value = office.address || '';
+  document.getElementById('office-is-hq').checked = !!office.isHq;
+
+  toggleModal('modal-office', 'open');
+}
+
+// Handle Add/Edit Office Form Submit
+async function handleSaveOffice(event) {
+  event.preventDefault();
+
+  const nameInput = document.getElementById('office-name');
+  const codeInput = document.getElementById('office-code');
+  const addressInput = document.getElementById('office-address');
+  const isHqInput = document.getElementById('office-is-hq');
+
+  const name = nameInput.value.trim();
+  const code = codeInput.value.trim().toUpperCase();
+  const address = addressInput.value.trim();
+  const isHq = isHqInput.checked;
+
+  nameInput.classList.remove('is-invalid');
+  if (!name) {
+    nameInput.classList.add('is-invalid');
+    showToast('Nazwa oddziału jest wymagana.', 'warning');
+    return;
+  }
+
+  const payload = { name, code, address, isHq };
+
+  try {
+    if (state.currentOfficeEditId) {
+      const res = await API.updateOffice(state.currentOfficeEditId, payload);
+      showToast(res.message, 'success');
+    } else {
+      const res = await API.addOffice(payload);
+      showToast(res.message, 'success');
+    }
+    toggleModal('modal-office', 'close');
+    await loadOffices();
+    renderOfficesView();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// Handle Delete Office with safeguards
+async function handleDeleteOffice(officeId, officeName, deviceCount) {
+  if (deviceCount > 0) {
+    showToast(`Nie można usunąć oddziału "${officeName}", ponieważ jest do niego przypisanych ${deviceCount} komputerów. Najpierw przetransferuj lub usuń sprzęt.`, 'warning', 6000);
+    return;
+  }
+
+  showConfirm(
+    `Czy na pewno chcesz usunąć oddział "${officeName}"? Ta operacja jest nieodwracalna.`,
+    'Usuń oddział',
+    async () => {
+      try {
+        const res = await API.deleteOffice(officeId);
+        showToast(res.message, 'success');
+        await loadOffices();
+        renderOfficesView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+  );
+}
+
 // Render Leasing View
 async function renderLeasing() {
   try {
@@ -1390,8 +1704,7 @@ async function renderLeasing() {
     }
 
     let totalMonthly = 0;
-    let warszawaMonthly = 0;
-    let krakowMonthly = 0;
+    const locationMonthly = {};
     let discrepanciesCount = 0;
 
     const expiringList = document.getElementById('expiring-leases-list');
@@ -1447,11 +1760,8 @@ async function renderLeasing() {
       if (!provider && expCost === 0 && actCost === 0) return;
 
       totalMonthly += actCost;
-      if (device.location === 'Warszawa') {
-        warszawaMonthly += actCost;
-      } else if (device.location === 'Kraków') {
-        krakowMonthly += actCost;
-      }
+      const loc = device.location || 'Nieznany';
+      locationMonthly[loc] = (locationMonthly[loc] || 0) + actCost;
 
       const diff = actCost - expCost;
       if (diff !== 0) {
@@ -1514,8 +1824,38 @@ async function renderLeasing() {
 
     // Update stats cards
     document.getElementById('lease-stat-total').innerText = `${totalMonthly.toFixed(2)} PLN`;
-    document.getElementById('lease-stat-warszawa').innerText = `${warszawaMonthly.toFixed(2)} PLN`;
-    document.getElementById('lease-stat-krakow').innerText = `${krakowMonthly.toFixed(2)} PLN`;
+
+    const branchCardsContainer = document.getElementById('dynamic-branch-cost-cards');
+    if (branchCardsContainer) {
+      branchCardsContainer.innerHTML = '';
+      const palette = [
+        { bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.22)', iconBg: 'rgba(59,130,246,0.18)', color: '#3b82f6', icon: 'fa-building' },
+        { bg: 'rgba(6,182,212,0.12)', border: 'rgba(6,182,212,0.22)', iconBg: 'rgba(6,182,212,0.18)', color: '#06b6d4', icon: 'fa-city' },
+        { bg: 'rgba(139,92,246,0.12)', border: 'rgba(139,92,246,0.22)', iconBg: 'rgba(139,92,246,0.18)', color: '#8b5cf6', icon: 'fa-map-pin' },
+        { bg: 'rgba(236,72,153,0.12)', border: 'rgba(236,72,153,0.22)', iconBg: 'rgba(236,72,153,0.18)', color: '#ec4899', icon: 'fa-landmark' }
+      ];
+
+      const officeNames = (state.offices && state.offices.length > 0)
+        ? state.offices.map(o => o.name)
+        : Object.keys(locationMonthly);
+
+      officeNames.forEach((offName, idx) => {
+        const theme = palette[idx % palette.length];
+        const cost = locationMonthly[offName] || 0;
+        branchCardsContainer.innerHTML += `
+          <div class="stat-card" style="background: linear-gradient(135deg, ${theme.bg}, rgba(0,0,0,0.2)); border-color: ${theme.border};">
+            <div class="stat-header">
+              <span class="stat-label">Koszty — ${offName}</span>
+              <div class="stat-icon" style="background: ${theme.iconBg};">
+                <i class="fas ${theme.icon}" style="color: ${theme.color};" aria-hidden="true"></i>
+              </div>
+            </div>
+            <div class="stat-value" style="font-size: 1.75rem;">${cost.toFixed(2)} PLN</div>
+            <div class="stat-desc">Oddział ${offName}</div>
+          </div>
+        `;
+      });
+    }
 
     const discrepancyCard = document.getElementById('lease-discrepancy-card');
     const discrepancyValue = document.getElementById('lease-stat-discrepancies');
@@ -2079,6 +2419,7 @@ async function handleLoginSubmit(event) {
     document.getElementById('auth-overlay').classList.remove('active');
     
     showToast(`Zalogowano pomyślnie jako ${data.user.name}`, 'success');
+    await loadOffices();
     updatePermissions();
   } catch (err) {
     showToast(err.message, 'error');
@@ -2369,15 +2710,7 @@ function setupFilters() {
     renderInventory();
   });
 
-  locationChips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      locationChips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      
-      state.filters.location = chip.getAttribute('data-location');
-      renderInventory();
-    });
-  });
+  renderLocationChips();
 
   // Audit log filters listeners
   const auditSearchInput = document.getElementById('audit-search-input');
@@ -2456,6 +2789,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('loan-form').addEventListener('submit', handleLoanSubmit);
   document.getElementById('return-form').addEventListener('submit', handleReturnSubmit);
   document.getElementById('confirm-transfer-form').addEventListener('submit', handleConfirmTransferSubmit);
+  document.getElementById('transfer-select-form').addEventListener('submit', handleConfirmTransferInitiate);
+  document.getElementById('office-form').addEventListener('submit', handleSaveOffice);
+
+  const addOfficeBtn = document.getElementById('add-office-btn');
+  if (addOfficeBtn) addOfficeBtn.addEventListener('click', openAddOfficeModal);
   
   // Auth Submit and Toggle Listeners
   document.getElementById('auth-login-form').addEventListener('submit', handleLoginSubmit);
@@ -2570,6 +2908,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast(`Witaj ponownie, ${data.user.name}!`, 'success');
       
       // Load app
+      await loadOffices();
       updatePermissions();
       switchView('dashboard');
     } catch (err) {

@@ -53,8 +53,8 @@ function requireAdminOrIT(req, res, next) {
   next();
 }
 
-// Ensure initial admin user exists so the system can be accessed out of the box
-async function ensureAdminExists() {
+// Ensure initial admin user and default offices exist so the system is ready out of the box
+async function ensureDefaultsExist() {
   try {
     const admins = await db.users.find({ role: 'admin' });
     if (admins.length === 0) {
@@ -69,8 +69,26 @@ async function ensureAdminExists() {
       });
       console.log('[Auth] Administrator account ready: admin@firma.pl / admin123');
     }
+
+    const offices = await db.offices.find();
+    if (offices.length === 0) {
+      console.log('[Setup] Seeding default offices (Warszawa HQ, Kraków)...');
+      await db.offices.create({
+        name: 'Warszawa',
+        code: 'WAW',
+        isHq: true,
+        address: 'ul. Marszałkowska 10, 00-001 Warszawa'
+      });
+      await db.offices.create({
+        name: 'Kraków',
+        code: 'KRK',
+        isHq: false,
+        address: 'ul. Floriańska 20, 31-021 Kraków'
+      });
+      console.log('[Setup] Default offices ready.');
+    }
   } catch (err) {
-    console.error('[Auth Error] Could not initialize administrator:', err);
+    console.error('[Setup Error] Could not initialize defaults:', err);
   }
 }
 
@@ -325,19 +343,197 @@ app.get('/api/users', authenticateToken, async (req, res) => {
   }
 });
 
+// --- Offices Management Endpoints ---
+
+// GET All Offices (with device counts stationed in each)
+app.get('/api/offices', authenticateToken, async (req, res) => {
+  try {
+    const offices = await db.offices.find();
+    const devices = await db.devices.find();
+    const result = offices.map(off => ({
+      ...off,
+      deviceCount: devices.filter(d => d.location === off.name).length
+    }));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd pobierania oddziałów: ' + err.message });
+  }
+});
+
+// POST Create Office (Admin only)
+app.post('/api/offices', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { name, code, isHq, address } = req.body;
+    if (!name || name.trim() === '') {
+      return res.status(400).json({ error: 'Nazwa oddziału jest wymagana.' });
+    }
+
+    const trimmedName = name.trim();
+    const exists = await db.offices.exists({ name: trimmedName });
+    if (exists) {
+      return res.status(400).json({ error: `Oddział o nazwie "${trimmedName}" już istnieje.` });
+    }
+
+    // If marked as HQ, unmark previous HQ
+    if (isHq) {
+      const allOffices = await db.offices.find();
+      for (const off of allOffices) {
+        if (off.isHq) {
+          await db.offices.findByIdAndUpdate(off._id || off.id, { isHq: false });
+        }
+      }
+    }
+
+    const newOffice = await db.offices.create({
+      name: trimmedName,
+      code: code ? code.trim().toUpperCase() : '',
+      isHq: Boolean(isHq),
+      address: address ? address.trim() : ''
+    });
+
+    await db.activities.create({
+      type: 'maintenance',
+      title: `Dodano nowy oddział: ${trimmedName}${isHq ? ' (Centrala/HQ)' : ''}`,
+      user: req.user.name,
+      admin: req.user.name,
+      date: getFormattedDateTime(),
+      details: `Kod: ${newOffice.code || 'Brak'}, Adres: ${newOffice.address || 'Brak'}`
+    });
+
+    res.status(201).json(newOffice);
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd tworzenia oddziału: ' + err.message });
+  }
+});
+
+// PUT Update Office (Admin only)
+app.put('/api/offices/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const officeId = req.params.id;
+    const { name, code, isHq, address } = req.body;
+    const office = await db.offices.findById(officeId);
+    if (!office) {
+      return res.status(404).json({ error: 'Oddział nie istnieje.' });
+    }
+
+    const updateData = {};
+    const oldName = office.name;
+
+    if (name && name.trim() !== '') {
+      const newName = name.trim();
+      if (newName !== oldName) {
+        const nameTaken = await db.offices.exists({ name: newName });
+        if (nameTaken) {
+          return res.status(400).json({ error: `Nazwa oddziału "${newName}" jest już zajęta.` });
+        }
+        updateData.name = newName;
+
+        // Cascade rename to all devices stationed in this office
+        const devices = await db.devices.find({ location: oldName });
+        for (const dev of devices) {
+          await db.devices.findByIdAndUpdate(dev._id || dev.id, { location: newName });
+        }
+      }
+    }
+
+    if (code !== undefined) updateData.code = code.trim().toUpperCase();
+    if (address !== undefined) updateData.address = address.trim();
+
+    if (isHq !== undefined) {
+      updateData.isHq = Boolean(isHq);
+      if (updateData.isHq) {
+        const allOffices = await db.offices.find();
+        for (const off of allOffices) {
+          const oId = off._id || off.id;
+          if (oId.toString() !== officeId.toString() && off.isHq) {
+            await db.offices.findByIdAndUpdate(oId, { isHq: false });
+          }
+        }
+      }
+    }
+
+    const updated = await db.offices.findByIdAndUpdate(officeId, updateData);
+
+    await db.activities.create({
+      type: 'maintenance',
+      title: `Zaktualizowano oddział: ${updateData.name || oldName}`,
+      user: req.user.name,
+      admin: req.user.name,
+      date: getFormattedDateTime(),
+      details: `Zmiana: ${oldName} -> ${updateData.name || oldName}`
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd aktualizacji oddziału: ' + err.message });
+  }
+});
+
+// DELETE Office (Admin only)
+app.delete('/api/offices/:id', authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const officeId = req.params.id;
+    const office = await db.offices.findById(officeId);
+    if (!office) {
+      return res.status(404).json({ error: 'Oddział nie istnieje.' });
+    }
+
+    const allOffices = await db.offices.find();
+    if (allOffices.length <= 1) {
+      return res.status(400).json({ error: 'Nie można usunąć jedynego oddziału. W systemie musi pozostać co najmniej jedno biuro.' });
+    }
+
+    const allDevices = await db.devices.find();
+    const devicesAtOffice = allDevices.filter(d => d.location === office.name || (d.transferTo === office.name && d.status === 'in_transit'));
+    if (devicesAtOffice.length > 0) {
+      return res.status(400).json({ 
+        error: `Nie można usunąć oddziału "${office.name}", ponieważ jest do niego przypisanych ${devicesAtOffice.length} urządzeń. Przenieś najpierw sprzęt do innej lokalizacji.` 
+      });
+    }
+
+    await db.offices.findByIdAndDelete(officeId);
+
+    await db.activities.create({
+      type: 'maintenance',
+      title: `Usunięto oddział: ${office.name}`,
+      user: req.user.name,
+      admin: req.user.name,
+      date: getFormattedDateTime(),
+      details: `Oddział ${office.name} został trwale usunięty z konfiguracji.`
+    });
+
+    res.json({ message: `Oddział "${office.name}" został pomyślnie usunięty.` });
+  } catch (err) {
+    res.status(500).json({ error: 'Błąd usuwania oddziału: ' + err.message });
+  }
+});
+
 // 1. GET Stats
 app.get('/api/stats', authenticateToken, async (req, res) => {
   try {
     const devices = await db.devices.find();
+    const offices = await db.offices.find();
     
+    const byLocation = {};
+    offices.forEach(off => {
+      byLocation[off.name] = 0;
+    });
+    devices.forEach(d => {
+      if (d.location) {
+        byLocation[d.location] = (byLocation[d.location] || 0) + 1;
+      }
+    });
+
     const stats = {
       total: devices.length,
       available: devices.filter(d => d.status === 'available').length,
       loaned: devices.filter(d => d.status === 'loaned').length,
       maintenance: devices.filter(d => d.status === 'maintenance').length,
       retired: devices.filter(d => d.status === 'retired').length,
-      hqWarszawa: devices.filter(d => d.location === 'Warszawa').length,
-      hqKrakow: devices.filter(d => d.location === 'Kraków').length
+      byLocation,
+      // Backward compatibility
+      hqWarszawa: byLocation['Warszawa'] || 0,
+      hqKrakow: byLocation['Kraków'] || 0
     };
     
     res.json(stats);
@@ -405,18 +601,22 @@ app.post('/api/devices', authenticateToken, requireAdminOrIT, async (req, res) =
       return res.status(400).json({ error: 'Typ urządzenia musi być "laptop" lub "desktop".' });
     }
 
-    if (!['Warszawa', 'Kraków'].includes(location)) {
-      return res.status(400).json({ error: 'Oddział musi być "Warszawa" lub "Kraków".' });
+    const officeExists = await db.offices.exists({ name: location.trim() });
+    if (!officeExists) {
+      return res.status(400).json({ error: `Wybrany oddział "${location}" nie istnieje w systemie. Dodaj go w sekcji Oddziały.` });
     }
 
     if (status && !['available', 'maintenance', 'retired', 'loaned', 'in_transit'].includes(status)) {
       return res.status(400).json({ error: 'Nieprawidłowy status sprzętu.' });
     }
 
-    if (status === 'retired' && location !== 'Warszawa') {
-      return res.status(400).json({ 
-        error: 'Wycofanie / zwrot do leasingodawcy (status: Wycofany) jest możliwy wyłącznie z oddziału Warszawa. Przesuń najpierw sprzęt.' 
-      });
+    if (status === 'retired') {
+      const hqOffice = await db.offices.findOne({ isHq: true });
+      if (hqOffice && location.trim() !== hqOffice.name) {
+        return res.status(400).json({ 
+          error: `Wycofanie / zwrot do leasingodawcy (status: Wycofany) jest możliwy wyłącznie z centrali (${hqOffice.name}). Przesuń najpierw sprzęt.` 
+        });
+      }
     }
 
     const existsAsset = await db.devices.exists({ assetTag: assetTag.trim() });
@@ -507,8 +707,11 @@ app.put('/api/devices/:id', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Nieprawidłowy status sprzętu.' });
     }
 
-    if (updateData.location && !['Warszawa', 'Kraków'].includes(updateData.location)) {
-      return res.status(400).json({ error: 'Oddział musi być "Warszawa" lub "Kraków".' });
+    if (updateData.location) {
+      const officeExists = await db.offices.exists({ name: updateData.location.trim() });
+      if (!officeExists) {
+        return res.status(400).json({ error: `Wybrany oddział "${updateData.location}" nie istnieje w systemie.` });
+      }
     }
 
     if (device.status === 'loaned' && updateData.status && updateData.status !== 'loaned') {
@@ -517,10 +720,13 @@ app.put('/api/devices/:id', authenticateToken, async (req, res) => {
 
     const finalLocation = updateData.location || device.location;
     const finalStatus = updateData.status || device.status;
-    if (finalStatus === 'retired' && finalLocation !== 'Warszawa') {
-      return res.status(400).json({ 
-        error: 'Wycofanie / zwrot do leasingodawcy (status: Wycofany) jest możliwy wyłącznie z oddziału Warszawa. Dokonaj najpierw przesunięcia do Warszawy.' 
-      });
+    if (finalStatus === 'retired') {
+      const hqOffice = await db.offices.findOne({ isHq: true });
+      if (hqOffice && finalLocation !== hqOffice.name) {
+        return res.status(400).json({ 
+          error: `Wycofanie / zwrot do leasingodawcy (status: Wycofany) jest możliwy wyłącznie z centrali (${hqOffice.name}). Dokonaj najpierw przesunięcia do ${hqOffice.name}.` 
+        });
+      }
     }
 
     // Compare fields for Audit Log
@@ -602,7 +808,26 @@ app.post('/api/devices/:id/transfer', authenticateToken, requireAdminOrIT, async
     }
 
     const oldLocation = device.location;
-    const newLocation = oldLocation === 'Warszawa' ? 'Kraków' : 'Warszawa';
+    let newLocation = req.body.targetLocation;
+
+    if (!newLocation || newLocation.trim() === '') {
+      const allOffices = await db.offices.find();
+      const pickOther = allOffices.find(o => o.name !== oldLocation);
+      if (!pickOther) {
+        return res.status(400).json({ error: 'Brak innego oddziału w systemie, do którego można przesunąć sprzęt.' });
+      }
+      newLocation = pickOther.name;
+    } else {
+      newLocation = newLocation.trim();
+      const exists = await db.offices.exists({ name: newLocation });
+      if (!exists) {
+        return res.status(400).json({ error: `Oddział docelowy "${newLocation}" nie istnieje w systemie.` });
+      }
+      if (newLocation === oldLocation) {
+        return res.status(400).json({ error: 'Oddział docelowy musi różnić się od bieżącej lokalizacji sprzętu.' });
+      }
+    }
+
     const initiatedAt = getFormattedDateTime();
 
     await db.devices.findByIdAndUpdate(deviceId, {
@@ -999,7 +1224,7 @@ function getLocalIpAddresses() {
 // Start Web Server
 app.listen(PORT, '0.0.0.0', async () => {
   await db.connectDb();
-  await ensureAdminExists();
+  await ensureDefaultsExist();
   console.log(`\nIT Lease Hub is running!`);
   console.log(`  Local access:   http://localhost:${PORT}`);
   

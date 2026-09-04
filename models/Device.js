@@ -30,8 +30,8 @@ const deviceSchema = new mongoose.Schema({
   },
   location: {
     type: String,
-    enum: ['Warszawa', 'Kraków'],
-    required: true
+    required: true,
+    trim: true
   },
   status: {
     type: String,

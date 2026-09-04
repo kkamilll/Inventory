@@ -150,6 +150,21 @@ const defaultDevices = [
   }
 ];
 
+const defaultOffices = [
+  {
+    name: 'Warszawa',
+    code: 'WAW',
+    isHq: true,
+    address: 'ul. Marszałkowska 10, 00-001 Warszawa'
+  },
+  {
+    name: 'Kraków',
+    code: 'KRK',
+    isHq: false,
+    address: 'ul. Floriańska 20, 31-021 Kraków'
+  }
+];
+
 async function seed() {
   const isCleanOnly = process.argv.includes('--clean') || process.argv.includes('-c');
 
@@ -161,10 +176,12 @@ async function seed() {
     await db.loans.deleteMany({});
     await db.activities.deleteMany({});
     await db.users.deleteMany({});
+    await db.offices.deleteMany({});
 
     if (isCleanOnly) {
-      // Create only the default administrator account
+      // Create default administrator account and default HQ office
       await db.users.create(defaultUsers[0]);
+      await db.offices.create(defaultOffices[0]);
       console.log('\n=============================================');
       console.log('  DATABASE CLEANED (EMPTY STATE)');
       console.log('=============================================');
@@ -172,8 +189,14 @@ async function seed() {
       console.log('Default administrator account ready:');
       console.log(`  Login:    ${defaultUsers[0].email}`);
       console.log(`  Password: ${defaultUsers[0].password}`);
+      console.log(`Primary Office: ${defaultOffices[0].name} (HQ)`);
       console.log('=============================================\n');
       process.exit(0);
+    }
+
+    console.log('[Seed] Seeding default offices...');
+    for (const off of defaultOffices) {
+      await db.offices.create(off);
     }
 
     console.log('[Seed] Seeding default system users...');

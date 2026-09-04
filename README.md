@@ -83,10 +83,12 @@ Tailored permissions and targeted views for three corporate roles:
 - **Contract Expiration Watchlist**: Automated notice board highlighting contracts expiring within the next 6 months.
 - **Lease Calculator / TCO Simulator**: Dynamic financial simulation of monthly rates, interest costs, buyout values, and Total Cost of Ownership (TCO) with printable PDF simulation quotes.
 
-### 5. Multi-Office Logistics & Transfers
-- Inter-office transfer workflow (e.g., Warsaw HQ <-> Cracow Branch).
-- Intermediate state tracking (`in_transit`) with two-step delivery confirmation and hardware condition inspection upon arrival.
-- Enforces corporate business rules (e.g., lease returns to external leasing providers restricted to designated HQ hub).
+### 5. Multi-Office Logistics & Dynamic Branch Management
+- **Dynamic Branch Configuration**: Administrators can add, edit, and safely retire company offices directly via the UI (no hardcoded locations).
+- **Headquarters Designation**: Designate which location acts as corporate HQ / central leasing hub.
+- **Inter-Office Transfers**: Transfer hardware between any registered office branch with an intermediate state (`in_transit`), condition check upon receipt (`good` vs. `damaged`), and audit logging.
+- **Cascading & Safety Guards**: Renaming an office automatically cascades across all stationed devices; deleting an office is strictly prevented if devices are assigned to it or if it is the sole remaining location.
+- **Branch Leasing Cost Cards**: Leasing summary cards and analytics dynamically aggregate monthly expenses per office branch.
 
 ### 6. Zero-Config Database Fallback
 - Runs seamlessly against a production or local **MongoDB** database.
@@ -219,6 +221,12 @@ When initialized with `npm run seed`, the following test accounts are ready to u
 - `POST /api/devices/:id/transfer` — Initiate inter-office transfer *(IT / Admin)*
 - `POST /api/devices/:id/confirm-transfer` — Confirm delivery & inspect condition *(IT / Admin)*
 
+### Office & Branch Management
+- `GET /api/offices` — List all registered company office locations & HQ designation
+- `POST /api/offices` — Add a new office branch *(Admin only)*
+- `PUT /api/offices/:id` — Update branch details & automatically cascade renames to all devices *(Admin only)*
+- `DELETE /api/offices/:id` — Safely remove an office *(Admin only, verifies 0 devices assigned & >=1 office remains)*
+
 ### Loans & History
 - `POST /api/devices/:id/loan` — Issue hardware loan to employee *(IT / Admin)*
 - `POST /api/devices/:id/return` — Process equipment return *(IT / Admin)*
@@ -228,7 +236,7 @@ When initialized with `npm run seed`, the following test accounts are ready to u
 - `DELETE /api/history/completed` — Bulk delete returned loan records *(Admin only)*
 
 ### Analytics & System
-- `GET /api/stats` — Summary metrics and device distribution counters
+- `GET /api/stats` — Summary metrics and device distribution counters (dynamically grouped by branch)
 - `GET /api/activities` — Centralized audit activity feed
 - `DELETE /api/activities` — Clear system activity history *(Admin only)*
 
@@ -241,6 +249,7 @@ When initialized with `npm run seed`, the following test accounts are ready to u
 │   ├── Activity.js       # Audit log Mongoose schema
 │   ├── Device.js         # Hardware asset & leasing Mongoose schema
 │   ├── Loan.js           # Equipment loan record schema
+│   ├── Office.js         # Company office & HQ designation schema
 │   └── User.js           # User account & credential schema
 ├── public/
 │   ├── app.js            # Frontend application logic & API client
