@@ -1,45 +1,100 @@
 # IT Lease Hub
 
-An enterprise IT inventory, employee loan tracking, and equipment lease cost management system.
+[![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-v4.19-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Ready-47A248?style=flat&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
+[![UI](https://img.shields.io/badge/UI-Glassmorphic%20Dark-8A2BE2?style=flat)](public/)
 
-IT Lease Hub centralizes hardware lifecycle management for IT and Accounting departments. It enables organizations to manage computer assets, handle multi-branch equipment transfers, log employee loans and returns with condition checks, monitor leasing contracts, detect invoice discrepancies, and generate financial reports.
+> **Enterprise-grade IT asset inventory, employee hardware loan tracking, and equipment leasing cost reconciliation system.**
+
+IT Lease Hub centralizes hardware lifecycle management for IT and Accounting departments. It empowers modern organizations to track computer inventory across multiple office branches, handle inter-office logistics, log employee loans and return conditions, monitor leasing contracts, detect invoice discrepancies, and generate financial reports.
 
 ---
 
-## Features
+## Quick Start (TL;DR)
+
+Get up and running in 30 seconds:
+
+```bash
+# 1. Clone repository
+git clone https://github.com/your-username/it-lease-hub.git
+cd it-lease-hub
+
+# 2. Install dependencies
+npm install
+
+# 3. Seed demo data (7 devices, leases, loans, 3 role accounts)
+npm run seed
+
+# 4. Start the server
+npm run dev
+```
+
+Open **`http://localhost:3000`** in your browser. Log in using `admin@firma.pl` / `admin123`.
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TD
+    Client["Modern Web Client (Vanilla JS / SPA / Glassmorphic UI)"]
+    API["Express.js REST API (Port 3000)"]
+    Auth["JWT Authentication & RBAC Middleware"]
+    DBLayer["Dual-Mode Storage Layer (db.js)"]
+    Mongo[("MongoDB Engine (Primary)")]
+    JsonDB[("Local File Engine (db.json Fallback)")]
+    Mailer["Mailer Service (SMTP / Dev Console Simulation)"]
+
+    Client -->|REST & JWT| API
+    API --> Auth
+    Auth --> DBLayer
+    DBLayer -->|MongoDB Connected| Mongo
+    DBLayer -->|MongoDB Offline| JsonDB
+    API --> Mailer
+```
+
+---
+
+## Core Features
 
 ### 1. Role-Based Access Control (RBAC)
-Dedicated permissions and tailored dashboards for three system roles:
-- **IT Administrator**: Full system access, hardware CRUD, audit log management, user access control.
-- **IT Worker**: Manage device technical specifications, issue loans, process returns, initiate inter-office transfers. Financial data editing is restricted.
+Tailored permissions and targeted views for three corporate roles:
+- **IT Administrator**: Complete administrative control, hardware CRUD, audit log management, user role assignments.
+- **IT Worker**: Manage device technical specifications, issue loans, process returns, initiate inter-office transfers. Financial lease values are read-only.
 - **Accountant**: Manage lease contracts, actual vs. expected monthly installments, equipment values, and financial reconciliation. Technical specs and loan assignments are read-only.
 
 ### 2. Hardware Asset Management
-- Comprehensive inventory tracking for laptops and workstations.
-- Real-time filtering by device type, operational status, and office location (e.g., Warsaw HQ, Cracow R&D).
-- Instant full-text search across brands, models, serial numbers, and asset tags.
-- Detailed technical specifications (CPU, RAM, storage, notes).
-- PDF inventory report export.
+- Comprehensive inventory tracking for laptops, workstations, and monitors.
+- Dynamic filtering by device type, operational status, and office location (Warsaw HQ vs. Cracow Branch).
+- Real-time instant search across brands, models, serial numbers, and asset tags.
+- Detailed technical specifications (CPU, RAM, storage, condition notes).
+- PDF inventory report generation with a single click.
 
 ### 3. Equipment Loans & Returns
-- Assign hardware to employees with department and contact tracking.
-- Due date tracking and active loan monitoring.
-- Return workflow with hardware condition assessment (`good` vs. `damaged`) and automatic maintenance notes.
-- Complete device loan history and centralized audit log.
+- Issue hardware to employees with department tagging and return deadlines.
+- Live tracking of active vs. overdue equipment loans.
+- Return workflow with hardware condition assessment (`good` vs. `damaged`) and automated maintenance flagging.
+- Complete audit trail and device history log.
 
 ### 4. Lease Management & Financial Reconciliation
-- **Reconciliation Table**: Compares contractually expected lease rates against actual billed invoices to surface cost discrepancies.
-- **Contract Expiration Watchlist**: Flags leases terminating within the next 6 months.
-- **Lease Calculator / TCO Simulator**: Calculates monthly rates, buyout options, and Total Cost of Ownership (TCO) with PDF simulation export.
+- **Reconciliation Engine**: Compares contractually expected lease rates against actual billed invoice values to detect cost discrepancies and overbilling.
+- **Contract Expiration Watchlist**: Automated notice board highlighting contracts expiring within the next 6 months.
+- **Lease Calculator / TCO Simulator**: Dynamic financial simulation of monthly rates, interest costs, buyout values, and Total Cost of Ownership (TCO) with printable PDF simulation quotes.
 
-### 5. Multi-Office Logistics
-- Inter-office transfer workflow (e.g., Warsaw <-> Cracow).
-- Transition state tracking (`in_transit`) with two-step delivery confirmation and condition intake logging.
-- Enforcement of business rules (e.g., equipment retirement handled through designated leasing hubs).
+### 5. Multi-Office Logistics & Transfers
+- Inter-office transfer workflow (e.g., Warsaw HQ <-> Cracow Branch).
+- Intermediate state tracking (`in_transit`) with two-step delivery confirmation and hardware condition inspection upon arrival.
+- Enforces corporate business rules (e.g., lease returns to external leasing providers restricted to designated HQ hub).
 
-### 6. Authentication & Security
+### 6. Zero-Config Database Fallback
+- Runs seamlessly against a production or local **MongoDB** database.
+- If MongoDB is unavailable or not installed, the application automatically switches to a built-in **local JSON database (`db.json`)** with zero manual configuration required.
+
+### 7. Authentication & Security
 - Secure session handling using JSON Web Tokens (JWT).
-- Password hashing with bcrypt.
+- Secure password hashing using bcrypt.
 - Password recovery via time-limited 6-digit email OTP (One-Time Password) with console fallback in development mode.
 - In-app password change for authenticated users.
 
@@ -47,130 +102,135 @@ Dedicated permissions and tailored dashboards for three system roles:
 
 ## Tech Stack
 
-- **Backend**: Node.js, Express.js, JWT (`jsonwebtoken`), bcryptjs, Nodemailer
-- **Database**: MongoDB via Mongoose with **automatic zero-config fallback to local file storage (`db.json`)** when MongoDB is not connected
-- **Frontend**: Vanilla JavaScript (ES6+), CSS3 (Modern Glassmorphic Dark UI), HTML5
-- **Libraries**: Chart.js (analytics), jsPDF (PDF export)
+| Layer | Technologies |
+|---|---|
+| **Backend** | Node.js, Express.js, JWT (`jsonwebtoken`), `bcryptjs`, `cors`, `dotenv` |
+| **Database** | MongoDB via Mongoose, with automatic zero-config fallback to local file storage (`db.json`) |
+| **Email Service** | Nodemailer with development fallback simulation (`last_sent_email.txt`) |
+| **Frontend** | Vanilla JavaScript (ES6+), CSS3 (Modern Glassmorphic Dark UI), HTML5 |
+| **Client Libraries**| Chart.js (Analytics), jsPDF (PDF export engine), FontAwesome Icons |
 
 ---
 
-## Getting Started
+## Installation & Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (version 18 or higher recommended)
-- *(Optional)* [MongoDB](https://www.mongodb.com/) (if not installed or running, the system will automatically operate using the built-in local JSON file database)
+- [Node.js](https://nodejs.org/) (v18.0.0 or higher recommended)
+- *(Optional)* [MongoDB](https://www.mongodb.com/) (if not running, local JSON database mode activates automatically)
 
-### Installation
+### Step-by-Step Setup
 
-1. Clone the repository:
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/your-username/it-lease-hub.git
    cd it-lease-hub
    ```
 
-2. Install dependencies:
+2. **Install dependencies:**
    ```bash
    npm install
    ```
 
-3. Configure environment variables:
+3. **Configure environment variables:**
    ```bash
    cp .env.example .env
    ```
-   Edit `.env` to customize the port, database URI, JWT secret, or SMTP configuration.
+   *(The default `.env` settings work out of the box for local development).*
 
-4. *(Optional)* Seed demo data or start with a clean database:
-   ```bash
-   # Populate with realistic demo data (7 devices, leasing contracts, loans, users)
-   npm run seed
+4. **Database Seeding & Modes:**
+   - **Populate with sample demo data** (recommended for evaluation):
+     ```bash
+     npm run seed
+     ```
+   - **Reset to a clean, empty state** (retains only the primary administrator account):
+     ```bash
+     npm run seed:clean
+     ```
 
-   # Or reset to an empty database (retains only the admin account)
-   npm run seed:clean
-   ```
-
-5. Start the application:
+5. **Start the development server:**
    ```bash
    npm run dev
-   # or npm start
+   # or for production:
+   npm start
    ```
 
-6. Access the web interface:
-   Open your browser and navigate to `http://localhost:3000`.
+6. **Open in browser:**
+   Navigate to **`http://localhost:3000`**.
 
 ---
 
 ## Default Accounts
 
-When seeded with `npm run seed`, the system includes pre-configured test accounts for evaluation:
+When initialized with `npm run seed`, the following test accounts are ready to use:
 
 | Role | Email | Password | Permissions |
 |---|---|---|---|
-| **IT Administrator** | `admin@firma.pl` | `admin123` | Full administrative control |
-| **IT Worker** | `it@firma.pl` | `it123456` | Hardware, loans, and transfers |
-| **Accountant** | `ksiegowosc@firma.pl` | `ksieg123` | Lease contracts and cost reconciliation |
+| **IT Administrator** | `admin@firma.pl` | `admin123` | Full system & user administration |
+| **IT Worker** | `it@firma.pl` | `it123456` | Equipment, loans, returns, and branch transfers |
+| **Accountant** | `ksiegowosc@firma.pl` | `ksieg123` | Lease contracts, invoice amounts, and financial reconciliation |
 
-When running with an empty database (`npm run seed:clean` or fresh install), the system ensures the primary **IT Administrator** account (`admin@firma.pl` / `admin123`) is ready for first login so you can add your own devices from scratch.
+> When running on a clean database (`npm run seed:clean`), the system ensures the primary **IT Administrator** (`admin@firma.pl` / `admin123`) is ready for first login so you can add devices and users from scratch.
 
 ---
 
-## Database Commands
+## Database Management Commands
 
 | Command | Description |
 |---|---|
-| `npm run seed` | Resets and populates the database with full demo data (devices, loans, leasing info, 3 user roles). |
-| `npm run seed:clean` | Wipes all devices, loans, and activities, leaving only the clean administrator account. |
+| `npm run seed` | Resets and seeds the database with realistic demo devices, loans, activities, and 3 role accounts. |
+| `npm run seed:clean` | Empties all devices, loans, and activities, leaving only the clean administrator account. |
 
 ---
 
-## Environment Configuration
+## Configuration (`.env`)
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `3000` | Port for the HTTP server |
-| `MONGO_URI` | `mongodb://localhost:27017/it-lease` | MongoDB connection URI |
-| `JWT_SECRET` | `it-lease-hub-super-secret-key-2026` | Secret key for signing session tokens |
-| `SMTP_HOST` | *(Optional)* | SMTP server host for sending password reset emails |
+| `PORT` | `3000` | HTTP port for the web server |
+| `MONGO_URI` | `mongodb://localhost:27017/it-lease` | MongoDB connection string |
+| `JWT_SECRET` | `it-lease-hub-super-secret-key-2026` | Secret key used to sign session tokens |
+| `SMTP_HOST` | *(Optional)* | SMTP host for sending real password reset emails |
 | `SMTP_PORT` | `587` | SMTP server port |
-| `SMTP_SECURE` | `false` | Enable TLS (`true` for port 465) |
-| `SMTP_USER` | *(Optional)* | SMTP authentication username |
-| `SMTP_PASS` | *(Optional)* | SMTP authentication password |
-| `SMTP_FROM` | `no-reply@firma.pl` | Sender address for outgoing emails |
+| `SMTP_SECURE` | `false` | Enable TLS encryption (`true` for port 465) |
+| `SMTP_USER` | *(Optional)* | SMTP username |
+| `SMTP_PASS` | *(Optional)* | SMTP password |
+| `SMTP_FROM` | `no-reply@firma.pl` | From address for transactional emails |
 
-> **Development Note**: When SMTP credentials are not provided, password reset OTP codes are output directly to the server console and logged to `last_sent_email.txt` for testing.
+> **Development Mode**: If SMTP credentials are left empty, password recovery OTP codes are printed directly to the server terminal and logged to `last_sent_email.txt`.
 
 ---
 
-## API Summary
+## REST API Reference
 
 ### Authentication
-- `POST /api/auth/register` — Register a new user account
+- `POST /api/auth/register` — Register a new account
 - `POST /api/auth/login` — Authenticate and receive a JWT token
-- `GET /api/auth/me` — Retrieve current session profile
-- `POST /api/auth/change-password` — Change password for authenticated user
-- `POST /api/auth/forgot-password/request` — Request 6-digit OTP reset code
-- `POST /api/auth/forgot-password/reset` — Verify OTP and set new password
+- `GET /api/auth/me` — Retrieve current authenticated session profile
+- `POST /api/auth/change-password` — Change password for current user
+- `POST /api/auth/forgot-password/request` — Request 6-digit recovery OTP
+- `POST /api/auth/forgot-password/reset` — Verify OTP code and set new password
 
 ### Devices & Inventory
-- `GET /api/devices` — List devices with filtering (`type`, `status`, `location`, `search`)
-- `GET /api/devices/:id` — Get device details
-- `POST /api/devices` — Create a new device *(IT/Admin)*
+- `GET /api/devices` — List devices with filters (`type`, `status`, `location`, `search`)
+- `GET /api/devices/:id` — Retrieve single device details
+- `POST /api/devices` — Create a new device *(IT / Admin)*
 - `PUT /api/devices/:id` — Update device specs or financial details *(Role-filtered)*
-- `DELETE /api/devices/:id` — Remove device *(Admin only)*
-- `POST /api/devices/:id/transfer` — Initiate inter-office transfer *(IT/Admin)*
-- `POST /api/devices/:id/confirm-transfer` — Confirm delivery and inspect condition *(IT/Admin)*
+- `DELETE /api/devices/:id` — Remove device from inventory *(Admin only)*
+- `POST /api/devices/:id/transfer` — Initiate inter-office transfer *(IT / Admin)*
+- `POST /api/devices/:id/confirm-transfer` — Confirm delivery & inspect condition *(IT / Admin)*
 
 ### Loans & History
-- `POST /api/devices/:id/loan` — Issue loan to employee *(IT/Admin)*
-- `POST /api/devices/:id/return` — Process return and log condition *(IT/Admin)*
-- `GET /api/loans/active` — List currently active loans
-- `GET /api/history` — List full loan history
-- `DELETE /api/history/:id` — Delete a single history record *(Admin only)*
-- `DELETE /api/history/completed` — Clear all returned loan records *(Admin only)*
+- `POST /api/devices/:id/loan` — Issue hardware loan to employee *(IT / Admin)*
+- `POST /api/devices/:id/return` — Process equipment return *(IT / Admin)*
+- `GET /api/loans/active` — List active equipment loans
+- `GET /api/history` — List complete loan history
+- `DELETE /api/history/:id` — Delete a single loan history record *(Admin only)*
+- `DELETE /api/history/completed` — Bulk delete returned loan records *(Admin only)*
 
-### Metrics & Activities
-- `GET /api/stats` — High-level dashboard counters and distribution
-- `GET /api/activities` — Filterable audit trail of system events
-- `DELETE /api/activities` — Clear activity logs *(Admin only)*
+### Analytics & System
+- `GET /api/stats` — Summary metrics and device distribution counters
+- `GET /api/activities` — Centralized audit activity feed
+- `DELETE /api/activities` — Clear system activity history *(Admin only)*
 
 ---
 
@@ -178,25 +238,26 @@ When running with an empty database (`npm run seed:clean` or fresh install), the
 
 ```text
 ├── models/
-│   ├── Activity.js       # Audit log schema
-│   ├── Device.js         # Hardware asset & leasing schema
-│   ├── Loan.js           # Loan record schema
-│   └── User.js           # User credentials & role schema
+│   ├── Activity.js       # Audit log Mongoose schema
+│   ├── Device.js         # Hardware asset & leasing Mongoose schema
+│   ├── Loan.js           # Equipment loan record schema
+│   └── User.js           # User account & credential schema
 ├── public/
-│   ├── app.js            # Client-side state management & API client
-│   ├── index.html        # Single-page application markup & modals
-│   └── styles.css        # Responsive dark-theme design system
-├── .env.example          # Sample environment configuration
-├── .gitignore            # Git exclusion rules
-├── db.js                 # Dual-mode database layer (MongoDB & JSON fallback)
-├── mailer.js             # Email transport & local dev simulation
-├── package.json          # Node.js dependencies & scripts
+│   ├── app.js            # Frontend application logic & API client
+│   ├── index.html        # Single-page interface markup & modals
+│   └── styles.css        # Responsive dark glassmorphism design system
+├── .env.example          # Template environment configuration
+├── .gitignore            # Git exclusion definitions
+├── db.js                 # Unified database layer (MongoDB & JSON fallback)
+├── mailer.js             # Email transport & local development simulator
+├── package.json          # Project metadata, scripts, and dependencies
 ├── README.md             # Project documentation
-└── server.js             # Express application & REST endpoints
+├── seed.js               # Database seeding and cleanup CLI utility
+└── server.js             # Express application & API routing
 ```
 
 ---
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](LICENSE).
