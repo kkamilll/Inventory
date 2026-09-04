@@ -67,7 +67,7 @@ Tailored permissions and targeted views for three corporate roles:
 
 ### 2. Hardware Asset Management
 - Comprehensive inventory tracking for laptops, workstations, and monitors.
-- Dynamic filtering by device type, operational status, and office location (Warsaw HQ vs. Cracow Branch).
+- Dynamic filtering by device type, operational status, and dynamic office branch chips.
 - Real-time instant search across brands, models, serial numbers, and asset tags.
 - Detailed technical specifications (CPU, RAM, storage, condition notes).
 - PDF inventory report generation with a single click.
