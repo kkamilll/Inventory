@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>IT Lease Hub — Zarządzanie i Inwentaryzacja Sprzętu IT</title>
+  <meta name="description" content="System inwentaryzacji i wypożyczeń sprzętu IT — laptopy, komputery, leasing. Zarządzaj urządzeniami, śledź koszty i planuj zwroty.">
+
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ═══════════════════════════════
+         SIDEBAR NAVIGATION
+    ═══════════════════════════════ -->
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="Menu główne">
+      <div class="brand">
+        <div class="brand-icon">
+          <i class="fas fa-laptop-house" aria-hidden="true"></i>
+        </div>
+        <span class="brand-name">IT Lease Hub</span>
+      </div>
+
+      <ul class="nav-menu" role="menubar">
+        <li class="nav-item" role="none">
+          <a class="nav-link active" data-view="dashboard" role="menuitem" tabindex="0">
+            <i class="fas fa-chart-pie" aria-hidden="true"></i>
+            <span>Dashboard</span>
+          </a>
+        </li>
+        <li class="nav-item" role="none">
+          <a class="nav-link" data-view="inventory" role="menuitem" tabindex="0">
+            <i class="fas fa-boxes-stacked" aria-hidden="true"></i>
+            <span>Baza Sprzętu</span>
+            <span class="nav-count" id="nav-count-inventory" style="display:none">0</span>
+          </a>
+        </li>
+        <li class="nav-item" role="none">
+          <a class="nav-link" data-view="loans" role="menuitem" tabindex="0">
+            <i class="fas fa-handshake" aria-hidden="true"></i>
+            <span>Aktywne Wypożyczenia</span>
+            <span class="nav-count" id="nav-count-loans" style="display:none">0</span>
+          </a>
+        </li>
+        <li class="nav-item" role="none">
+          <a class="nav-link" data-view="leasing" role="menuitem" tabindex="0">
+            <i class="fas fa-calculator" aria-hidden="true"></i>
+            <span>Leasing i Koszty</span>
+          </a>
+        </li>
+        <li class="nav-item" role="none">
+          <a class="nav-link" data-view="history" role="menuitem" tabindex="0">
+            <i class="fas fa-history" aria-hidden="true"></i>
+            <span>Log / Historia</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="location-indicator">
+          <span><i class="fas fa-shield-alt" aria-hidden="true"></i> IT Management Console</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Backdrop for mobile sidebar -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- ═══════════════════════════════
+         MAIN CONTENT AREA
+    ═══════════════════════════════ -->
+    <main class="main-content" id="main-content">
+
+      <!-- TOP HEADER -->
+      <header class="header" role="banner">
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button id="sidebar-toggle" class="btn btn-secondary sidebar-toggle-btn"
+                  style="padding: 0.5rem 0.7rem; border-radius: 10px;"
+                  aria-label="Otwórz/zamknij menu" aria-expanded="false" aria-controls="sidebar">
+            <i class="fas fa-bars" aria-hidden="true"></i>
+          </button>
+          <div class="header-title">
+            <h1 id="view-title">Dashboard</h1>
+            <p id="view-subtitle">Podsumowanie zasobów IT oraz statusu leasingu</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <!-- User profile widget -->
+          <div class="user-profile-widget" role="status" aria-live="polite">
+            <div style="text-align: right; line-height: 1.2;">
+              <span id="user-role-badge" style="font-size: 0.65rem; color: var(--accent-indigo); font-weight: 700; text-transform: uppercase; display: block; letter-spacing: 0.5px;">Rola</span>
+              <span id="active-user-name" style="font-size: 0.82rem; font-weight: 600; color: var(--text-primary);">Wczytywanie...</span>
+            </div>
+            <button id="change-pass-btn" class="btn btn-secondary btn-icon-only"
+                    onclick="toggleModal('modal-change-password', 'open')"
+                    title="Zmień hasło konta" style="width:34px; height:34px;">
+              <i class="fas fa-key" style="color: var(--color-info); font-size: 0.85rem;" aria-hidden="true"></i>
+            </button>
+            <button id="logout-btn" class="btn btn-secondary btn-icon-only"
+                    onclick="handleLogout()"
+                    title="Wyloguj się" style="width:34px; height:34px;">
+              <i class="fas fa-sign-out-alt" style="color: var(--color-danger); font-size: 0.85rem;" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <button id="add-device-btn" class="btn btn-primary" onclick="openAddDeviceModal()">
+            <i class="fas fa-plus" aria-hidden="true"></i> Dodaj Komputer
+          </button>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════════════
+           VIEW: DASHBOARD
+      ═══════════════════════════════ -->
+      <section id="view-dashboard" class="view-panel active" role="main" aria-label="Dashboard">
+
+        <!-- Stats Cards -->
+        <div class="stats-grid" role="region" aria-label="Statystyki zasobów">
+          <div class="stat-card total" role="article" aria-label="Całkowity zasób">
+            <div class="stat-header">
+              <span class="stat-label">Całkowity zasób</span>
+              <div class="stat-icon"><i class="fas fa-database" aria-hidden="true"></i></div>
+            </div>
+            <div class="stat-value" id="stat-total">–</div>
+            <div class="stat-desc">Zarejestrowane jednostki IT</div>
+            <div class="stat-progress"><div class="stat-progress-bar" id="stat-total-bar" style="width: 100%"></div></div>
+          </div>
+
+          <div class="stat-card available" role="article" aria-label="Dostępny sprzęt">
+            <div class="stat-header">
+              <span class="stat-label">Dostępne w magazynie</span>
+              <div class="stat-icon"><i class="fas fa-check-circle" aria-hidden="true"></i></div>
+            </div>
+            <div class="stat-value" id="stat-available">–</div>
+            <div class="stat-desc">Gotowe do wydania użytkownikom</div>
+            <div class="stat-progress"><div class="stat-progress-bar" id="stat-available-bar" style="width: 0%"></div></div>
+          </div>
+
+          <div class="stat-card loaned" role="article" aria-label="Wypożyczone">
+            <div class="stat-header">
+              <span class="stat-label">Wypożyczone</span>
+              <div class="stat-icon"><i class="fas fa-user-tag" aria-hidden="true"></i></div>
+            </div>
+            <div class="stat-value" id="stat-loaned">–</div>
+            <div class="stat-desc">W posiadaniu pracowników</div>
+            <div class="stat-progress"><div class="stat-progress-bar" id="stat-loaned-bar" style="width: 0%"></div></div>
+          </div>
+
+          <div class="stat-card maintenance" role="article" aria-label="W serwisie">
+            <div class="stat-header">
+              <span class="stat-label">W serwisie / naprawie</span>
+              <div class="stat-icon"><i class="fas fa-tools" aria-hidden="true"></i></div>
+            </div>
+            <div class="stat-value" id="stat-maintenance">–</div>
+            <div class="stat-desc">Wymagające interwencji IT</div>
+            <div class="stat-progress"><div class="stat-progress-bar" id="stat-maintenance-bar" style="width: 0%"></div></div>
+          </div>
+        </div>
+
+        <!-- Charts + Activity Feed -->
+        <div class="dashboard-grid">
+          <!-- Charts -->
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3 class="panel-title"><i class="fas fa-chart-bar" aria-hidden="true"></i> Analiza Struktury Magazynu</h3>
+            </div>
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 220px;">
+                <h4 style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-bottom: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Status urządzeń</h4>
+                <div style="position: relative; height: 210px;">
+                  <canvas id="statusChart" aria-label="Wykres statusów urządzeń" role="img"></canvas>
+                </div>
+              </div>
+              <div style="flex: 1; min-width: 220px;">
+                <h4 style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-bottom: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Lokalizacja w oddziałach</h4>
+                <div style="position: relative; height: 210px;">
+                  <canvas id="locationChart" aria-label="Wykres lokalizacji urządzeń" role="img"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity Feed -->
+          <div class="glass-panel">
+            <div class="panel-header">
+              <h3 class="panel-title"><i class="fas fa-bell" aria-hidden="true"></i> Ostatnie aktywności</h3>
+              <button id="clear-activities-btn" class="btn btn-secondary btn-sm" onclick="clearActivitiesLog()"
+                      style="border-color: rgba(239,68,68,0.25); color: var(--color-danger);">
+                <i class="fas fa-trash-alt" aria-hidden="true"></i> Wyczyść
+              </button>
+            </div>
+            <div class="recent-activity-list" id="recent-activities" role="feed" aria-live="polite" aria-label="Feed aktywności">
+              <div class="loading-spinner"><span class="spinner"></span> Ładowanie...</div>
+            </div>
+          </div>
+        </div>
+
+
+      </section>
+
+      <!-- ═══════════════════════════════
+           VIEW: INVENTORY (Baza Sprzętu)
+      ═══════════════════════════════ -->
+      <section id="view-inventory" class="view-panel" role="main" aria-label="Baza sprzętu">
+        <div class="glass-panel">
+          <!-- Search & Filters -->
+          <div class="controls-bar" role="search" aria-label="Filtrowanie urządzeń">
+            <div class="search-wrapper" style="flex-grow: 2;">
+              <i class="fas fa-search" aria-hidden="true"></i>
+              <input type="text" id="search-input" class="search-input"
+                     placeholder="Szukaj po modelu, marce, serialu, asset tagu..."
+                     aria-label="Szukaj urządzeń" autocomplete="off">
+            </div>
+
+            <select id="filter-type" class="filter-select" aria-label="Filtruj po typie urządzenia">
+              <option value="all">Wszystkie typy</option>
+              <option value="laptop">Laptopy</option>
+              <option value="desktop">Stacjonarne</option>
+            </select>
+
+            <select id="filter-status" class="filter-select" aria-label="Filtruj po statusie">
+              <option value="all">Wszystkie statusy</option>
+              <option value="available">Dostępne</option>
+              <option value="loaned">Wypożyczone</option>
+              <option value="maintenance">W serwisie</option>
+              <option value="retired">Wycofane</option>
+            </select>
+
+            <div class="location-filters" role="group" aria-label="Filtruj po oddziale">
+              <button class="location-chip active" data-location="all">Wszystkie</button>
+              <button class="location-chip" data-location="Warszawa">Warszawa</button>
+              <button class="location-chip" data-location="Kraków">Kraków</button>
+            </div>
+
+            <!-- PDF Export -->
+            <button class="btn btn-secondary btn-sm" onclick="generateInventoryPDF()"
+                    title="Wygeneruj raport PDF"
+                    style="border-color: rgba(239,68,68,0.35);">
+              <i class="fas fa-file-pdf" style="color: var(--color-danger);" aria-hidden="true"></i> PDF
+            </button>
+
+            <!-- Layout toggle -->
+            <div class="layout-toggle-container" role="group" aria-label="Przełącz widok">
+              <button id="layout-grid-btn" class="btn btn-secondary"
+                      style="background: var(--bg-glass-hover);" title="Widok kart"
+                      onclick="setInventoryLayout('grid')" aria-pressed="true">
+                <i class="fas fa-th-large" aria-hidden="true"></i>
+              </button>
+              <button id="layout-table-btn" class="btn btn-secondary"
+                      style="background: transparent;" title="Widok tabeli"
+                      onclick="setInventoryLayout('table')" aria-pressed="false">
+                <i class="fas fa-list" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Results counter -->
+          <div id="inventory-count-bar" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; display: none;">
+            Wyświetlanie: <strong id="inventory-result-count" style="color: var(--text-secondary);">0</strong> urządzeń
+          </div>
+
+          <!-- Inventory Container -->
+          <div id="inventory-container">
+            <div class="device-grid" id="device-grid">
+              <div class="empty-state">
+                <span class="spinner"></span>
+                <p>Ładowanie bazy urządzeń...</p>
+              </div>
+            </div>
+            <div class="table-container" id="device-table-container" style="display: none;">
+              <table class="custom-table" aria-label="Tabela urządzeń">
+                <thead>
+                  <tr>
+                    <th scope="col">Asset Tag / S/N</th>
+                    <th scope="col">Urządzenie</th>
+                    <th scope="col">Specyfikacja</th>
+                    <th scope="col">Lokalizacja</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Operacje</th>
+                  </tr>
+                </thead>
+                <tbody id="device-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════
+           VIEW: LOANS (Aktywne Wypożyczenia)
+      ═══════════════════════════════ -->
+      <section id="view-loans" class="view-panel" role="main" aria-label="Aktywne wypożyczenia">
+        <div class="glass-panel">
+          <div class="panel-header">
+            <h3 class="panel-title"><i class="fas fa-list-check" aria-hidden="true"></i> Aktualnie Wydany Sprzęt</h3>
+            <span id="loans-count-badge" style="font-size: 0.78rem; color: var(--text-muted);"></span>
+          </div>
+
+          <div class="table-container">
+            <table class="custom-table" aria-label="Tabela aktywnych wypożyczeń">
+              <thead>
+                <tr>
+                  <th scope="col">Sprzęt</th>
+                  <th scope="col">Pracownik</th>
+                  <th scope="col">Dział</th>
+                  <th scope="col">Siedziba</th>
+                  <th scope="col">Okres wypożyczenia</th>
+                  <th scope="col">Akcje</th>
+                </tr>
+              </thead>
+              <tbody id="loans-table-body">
+                <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span><p>Ładowanie...</p></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════
+           VIEW: LEASING & COSTS
+      ═══════════════════════════════ -->
+      <section id="view-leasing" class="view-panel" role="main" aria-label="Leasing i koszty">
+
+        <!-- Leasing Summary Cards -->
+        <div class="stats-grid" style="margin-bottom: 1.5rem;" role="region" aria-label="Podsumowanie kosztów leasingu">
+          <div class="stat-card total" style="background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04)); border-color: rgba(99,102,241,0.22);">
+            <div class="stat-header">
+              <span class="stat-label">Suma kosztów (miesięcznie)</span>
+              <div class="stat-icon" style="background: rgba(99,102,241,0.18);">
+                <i class="fas fa-coins" style="color: var(--accent-indigo);" aria-hidden="true"></i>
+              </div>
+            </div>
+            <div class="stat-value" id="lease-stat-total" style="font-size: 1.75rem;">0 PLN</div>
+            <div class="stat-desc">Suma wszystkich aktualnych rat netto</div>
+          </div>
+
+          <div class="stat-card available" style="background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0.04)); border-color: rgba(59,130,246,0.22);">
+            <div class="stat-header">
+              <span class="stat-label">Koszty — Warszawa</span>
+              <div class="stat-icon" style="background: rgba(59,130,246,0.18);">
+                <i class="fas fa-building" style="color: #3b82f6;" aria-hidden="true"></i>
+              </div>
+            </div>
+            <div class="stat-value" id="lease-stat-warszawa" style="font-size: 1.75rem;">0 PLN</div>
+            <div class="stat-desc">Łączny koszt leasingu, oddział Warszawa</div>
+          </div>
+
+          <div class="stat-card loaned" style="background: linear-gradient(135deg, rgba(6,182,212,0.12), rgba(6,182,212,0.04)); border-color: rgba(6,182,212,0.22);">
+            <div class="stat-header">
+              <span class="stat-label">Koszty — Kraków</span>
+              <div class="stat-icon" style="background: rgba(6,182,212,0.18);">
+                <i class="fas fa-microchip" style="color: #06b6d4;" aria-hidden="true"></i>
+              </div>
+            </div>
+            <div class="stat-value" id="lease-stat-krakow" style="font-size: 1.75rem;">0 PLN</div>
+            <div class="stat-desc">Łączny koszt leasingu, oddział Kraków</div>
+          </div>
+
+          <div class="stat-card maintenance" id="lease-discrepancy-card" style="background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(16,185,129,0.04)); border-color: rgba(16,185,129,0.22);">
+            <div class="stat-header">
+              <span class="stat-label" id="discrepancy-label">Rozbieżności finansowe</span>
+              <div class="stat-icon" id="discrepancy-icon" style="background: rgba(16,185,129,0.18);">
+                <i class="fas fa-check-circle" style="color: #10b981;" aria-hidden="true"></i>
+              </div>
+            </div>
+            <div class="stat-value" id="lease-stat-discrepancies" style="font-size: 1.75rem;">Brak</div>
+            <div class="stat-desc" id="discrepancy-desc">Koszty zgodne z oczekiwanymi</div>
+          </div>
+        </div>
+
+        <!-- Leasing Table + Expiring -->
+        <div class="leasing-grid">
+          <!-- Reconciliation Table -->
+          <div class="glass-panel" style="margin-bottom: 0;">
+            <div class="panel-header">
+              <h3 class="panel-title"><i class="fas fa-calculator" aria-hidden="true"></i> Rozliczenie Kosztów Leasingu</h3>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; padding: 0.65rem 0.9rem; background: rgba(0,0,0,0.15); border-radius: 8px; border: 1px solid var(--border-glass);">
+              <i class="fas fa-info-circle" style="color: var(--color-info); margin-right: 0.35rem;" aria-hidden="true"></i>
+              Porównanie <strong style="color: var(--text-secondary);">oczekiwanej raty</strong> (z umowy) z <strong style="color: var(--text-secondary);">rzeczywistą</strong> (z faktury). Rozbieżności wymagają wyjaśnienia.
+            </div>
+
+            <!-- Leasing Filters -->
+            <div class="controls-bar" style="padding: 0.75rem; background: rgba(0,0,0,0.12); border-radius: 12px; border: 1px solid var(--border-glass); margin-bottom: 1.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+              <div class="search-wrapper" style="flex-grow: 2; position: relative; display: flex; align-items: center;">
+                <i class="fas fa-search" style="position: absolute; left: 12px; color: var(--text-muted);" aria-hidden="true"></i>
+                <input type="text" id="lease-search-input" class="search-input" style="padding-left: 36px; width: 100%;"
+                       placeholder="Szukaj po modelu, marce, asset tagu..." aria-label="Szukaj w leasingu">
+              </div>
+              <select id="lease-filter-provider" class="filter-select" style="min-width: 170px;" aria-label="Filtruj po dostawcy leasingu">
+                <option value="all">Wszyscy dostawcy</option>
+              </select>
+              <select id="lease-filter-status" class="filter-select" style="min-width: 170px;" aria-label="Filtruj po stanie kosztów">
+                <option value="all">Wszystkie statusy</option>
+                <option value="match">Zgodne</option>
+                <option value="mismatch">Rozbieżności</option>
+              </select>
+              <button class="btn btn-secondary btn-icon-only" onclick="resetLeaseFilters()" title="Resetuj filtry" style="width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;">
+                <i class="fas fa-rotate" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            <div class="table-container" style="margin-top: 0;">
+              <table class="custom-table" aria-label="Tabela kosztów leasingu">
+                <thead>
+                  <tr>
+                    <th scope="col">Urządzenie</th>
+                    <th scope="col">Leasingodawca</th>
+                    <th scope="col">Okres umowy</th>
+                    <th scope="col">Rata oczekiwana</th>
+                    <th scope="col">Rata rzeczywista</th>
+                    <th scope="col">Stan kosztów</th>
+                  </tr>
+                </thead>
+                <tbody id="leasing-table-body">
+                  <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Expiring Leases -->
+          <div class="glass-panel" style="margin-bottom: 0;">
+            <div class="panel-header">
+              <h3 class="panel-title"><i class="fas fa-hourglass-half" aria-hidden="true"></i> Wygasające Umowy</h3>
+            </div>
+            <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 1rem;">Umowy leasingowe kończące się w ciągu <strong style="color: var(--color-warning);">6 miesięcy</strong></p>
+            <div class="recent-activity-list" id="expiring-leases-list" style="max-height: 340px;">
+              <div class="loading-spinner"><span class="spinner"></span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kalkulator Leasingowy -->
+        <div class="glass-panel" style="margin-top: 1.5rem;">
+          <div class="panel-header">
+            <h3 class="panel-title"><i class="fas fa-calculator" aria-hidden="true"></i> Kalkulator Leasingowy (Symulacja Kosztów)</h3>
+          </div>
+          <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            <div style="flex: 1.2; min-width: 280px;">
+              <form id="lease-calc-form" oninput="calculateLeaseSimulation()">
+                <div class="form-group-row">
+                  <div class="form-group">
+                    <label class="form-label" for="calc-value">Wartość sprzętu netto (PLN)</label>
+                    <input type="number" id="calc-value" class="form-control" value="5000" min="100" step="100">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="calc-period">Okres leasingu (miesiące)</label>
+                    <select id="calc-period" class="form-control">
+                      <option value="12">12 miesięcy (1 rok)</option>
+                      <option value="24">24 miesiące (2 lata)</option>
+                      <option value="36" selected>36 miesięcy (3 lata)</option>
+                      <option value="48">48 miesięcy (4 lata)</option>
+                      <option value="60">60 miesięcy (5 lat)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group-row">
+                  <div class="form-group">
+                    <label class="form-label" for="calc-interest">Roczne oprocentowanie (%)</label>
+                    <input type="number" id="calc-interest" class="form-control" value="6.5" min="0" max="50" step="0.1">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label" for="calc-buyout">Wykup jednorazowy (%)</label>
+                    <input type="number" id="calc-buyout" class="form-control" value="1" min="0" max="100" step="1">
+                  </div>
+                </div>
+              </form>
+            </div>
+            
+            <div style="flex: 0.8; min-width: 250px; background: rgba(0,0,0,0.18); padding: 1.25rem; border-radius: var(--radius-lg); border: 1px solid var(--border-glass); display: flex; flex-direction: column; justify-content: space-between;">
+              <div>
+                <h4 style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem; font-weight: 700;">Wyniki symulacji</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                  <div style="display: flex; justify-content: justify-content; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem;">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Rata miesięczna (netto):</span>
+                    <strong style="color: var(--accent-indigo); font-size: 1.1rem;" id="sim-monthly-cost">0.00 PLN</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem;">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Koszt wykupu (netto):</span>
+                    <strong style="color: var(--text-primary); font-size: 0.95rem;" id="sim-buyout-cost">0.00 PLN</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.4rem;">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Suma wszystkich opłat:</span>
+                    <strong style="color: var(--text-primary); font-size: 0.95rem;" id="sim-total-tco">0.00 PLN</strong>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; padding-bottom: 0.4rem;">
+                    <span style="color: var(--text-secondary); font-size: 0.85rem;">Koszt finansowania:</span>
+                    <strong style="color: var(--color-warning); font-size: 0.95rem;" id="sim-interest-cost">0.00 PLN</strong>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="exportLeaseSimulationPDF()" style="margin-top: 1rem; width: 100%; border-color: rgba(239, 68, 68, 0.35);">
+                <i class="fas fa-file-pdf" style="color: var(--color-danger);" aria-hidden="true"></i> Pobierz Symulację (PDF)
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════
+           VIEW: HISTORY / LOG
+      ═══════════════════════════════ -->
+      <section id="view-history" class="view-panel" role="main" aria-label="Historia i dziennik audytowy">
+        <div class="glass-panel">
+          <!-- Sub-tabs header -->
+          <div class="panel-header" style="flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-glass); padding-bottom: 1.1rem; margin-bottom: 1.25rem;">
+            <div class="subtabs-container" role="tablist" aria-label="Wybierz sekcję historii">
+              <button id="history-tab-loans-btn" class="btn btn-secondary active-tab-btn"
+                      onclick="setHistorySubTab('loans')"
+                      style="padding: 0.45rem 1rem; font-size: 0.82rem; font-weight: 600;"
+                      role="tab" aria-selected="true" aria-controls="subview-history-loans">
+                <i class="fas fa-handshake" style="margin-right: 0.35rem;" aria-hidden="true"></i>Historia Wypożyczeń
+              </button>
+              <button id="history-tab-audit-btn" class="btn btn-secondary"
+                      onclick="setHistorySubTab('audit')"
+                      style="padding: 0.45rem 1rem; font-size: 0.82rem; font-weight: 600; background: transparent;"
+                      role="tab" aria-selected="false" aria-controls="subview-history-audit">
+                <i class="fas fa-user-shield" style="margin-right: 0.35rem;" aria-hidden="true"></i>Dziennik Audytowy IT
+              </button>
+            </div>
+
+            <div id="loans-history-actions">
+              <button id="clear-history-btn" class="btn btn-danger btn-sm" onclick="clearCompletedHistory()">
+                <i class="fas fa-trash" aria-hidden="true"></i> Wyczyść ukończone
+              </button>
+            </div>
+          </div>
+
+          <!-- Sub-view: Loans History -->
+          <div id="subview-history-loans" class="history-subview active" role="tabpanel" aria-labelledby="history-tab-loans-btn">
+            <div class="table-container">
+              <table class="custom-table" aria-label="Historia wypożyczeń">
+                <thead>
+                  <tr>
+                    <th scope="col">Sprzęt</th>
+                    <th scope="col">Odbiorca</th>
+                    <th scope="col">Dział</th>
+                    <th scope="col">Wypożyczono</th>
+                    <th scope="col">Zwrócono</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="history-table-body">
+                  <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Sub-view: IT Audit Log -->
+          <div id="subview-history-audit" class="history-subview" style="display: none;" role="tabpanel" aria-labelledby="history-tab-audit-btn">
+            <!-- Audit Filters -->
+            <div class="controls-bar" style="padding: 0.75rem; background: rgba(0,0,0,0.12); border-radius: 12px; border: 1px solid var(--border-glass); margin-bottom: 1.25rem;">
+              <div class="search-wrapper" style="flex-grow: 2;">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="text" id="audit-search-input" class="search-input"
+                       placeholder="Szukaj w zdarzeniach..." aria-label="Szukaj w dzienniku audytowym">
+              </div>
+              <select id="audit-filter-admin" class="filter-select" style="min-width: 170px;" aria-label="Filtruj po administratorze">
+                <option value="all">Wszyscy administratorzy</option>
+              </select>
+              <select id="audit-filter-type" class="filter-select" style="min-width: 155px;" aria-label="Filtruj po typie akcji">
+                <option value="all">Wszystkie typy</option>
+                <option value="maintenance">Zarządzanie / Edycja</option>
+                <option value="transfer">Transfery</option>
+                <option value="loan">Wypożyczenia</option>
+                <option value="return">Zwroty</option>
+                <option value="system">Systemowe</option>
+              </select>
+              <button class="btn btn-secondary btn-icon-only" onclick="resetAuditFilters()" title="Resetuj filtry">
+                <i class="fas fa-rotate" aria-hidden="true"></i>
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table class="custom-table" aria-label="Dziennik audytowy IT">
+                <thead>
+                  <tr>
+                    <th scope="col" style="width: 135px;">Data / Czas</th>
+                    <th scope="col" style="width: 155px;">Administrator</th>
+                    <th scope="col" style="width: 115px;">Typ akcji</th>
+                    <th scope="col">Zdarzenie</th>
+                    <th scope="col">Szczegóły modyfikacji</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table-body">
+                  <tr><td colspan="5"><div class="empty-state"><span class="spinner"></span></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MODALS
+  ═══════════════════════════════════════════════════════════ -->
+
+  <!-- MODAL: Add / Edit Device -->
+  <div class="modal-overlay" id="modal-device" role="dialog" aria-modal="true" aria-labelledby="device-modal-title">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 id="device-modal-title">Dodaj Nowy Komputer</h2>
+        <button class="modal-close" onclick="toggleModal('modal-device', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="device-form" novalidate>
+        <div class="modal-body">
+
+          <!-- Podstawowe informacje -->
+          <p class="modal-section-title"><i class="fas fa-tag" aria-hidden="true"></i> Podstawowe informacje</p>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-asset">
+                Asset Tag (ID) <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="text" id="dev-asset" class="form-control" placeholder="np. PL26L001" required
+                     autocomplete="off" aria-required="true">
+              <span class="error-msg" id="dev-asset-error" role="alert">To pole jest wymagane.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-type">
+                Typ urządzenia <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <select id="dev-type" class="form-control" required aria-required="true">
+                <option value="laptop">Laptop</option>
+                <option value="desktop">Komputer stacjonarny</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-brand">
+                Producent / Marka <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="text" id="dev-brand" class="form-control" placeholder="np. Lenovo, Apple" required
+                     autocomplete="off" aria-required="true">
+              <span class="error-msg" id="dev-brand-error" role="alert">To pole jest wymagane.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-model">
+                Model <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="text" id="dev-model" class="form-control" placeholder="np. ThinkPad T14" required
+                     autocomplete="off" aria-required="true">
+              <span class="error-msg" id="dev-model-error" role="alert">To pole jest wymagane.</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="dev-serial">
+              Numer seryjny (S/N) <span class="required-star" aria-hidden="true">*</span>
+            </label>
+            <input type="text" id="dev-serial" class="form-control" placeholder="Wprowadź numer seryjny" required
+                   autocomplete="off" aria-required="true">
+            <span class="error-msg" id="dev-serial-error" role="alert">To pole jest wymagane.</span>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-location">
+                Siedziba przypisania <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <select id="dev-location" class="form-control" required aria-required="true">
+                <option value="Warszawa">Warszawa (Oddział leasingowy)</option>
+                <option value="Kraków">Kraków (R&D)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-status">
+                Status sprzętu <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <select id="dev-status" class="form-control" required aria-required="true">
+                <option value="available">Dostępny w magazynie</option>
+                <option value="maintenance">W serwisie (uszkodzony)</option>
+                <option value="retired">Wycofany (Zwrot do leasingu)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Specyfikacja techniczna -->
+          <p class="modal-section-title"><i class="fas fa-microchip" aria-hidden="true"></i> Specyfikacja techniczna <em style="font-weight: 400; font-style: normal; color: var(--text-muted); font-size: 0.78rem;">(opcjonalnie)</em></p>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-cpu">Procesor</label>
+              <input type="text" id="dev-cpu" class="form-control" placeholder="np. Intel i7-13th, Ryzen 7">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-ram">Pamięć RAM</label>
+              <input type="text" id="dev-ram" class="form-control" placeholder="np. 16 GB, 32 GB">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="dev-ssd">Dysk twardy</label>
+            <input type="text" id="dev-ssd" class="form-control" placeholder="np. 512 GB SSD, 1 TB NVMe">
+          </div>
+
+          <!-- Dane leasingowe -->
+          <p class="modal-section-title"><i class="fas fa-file-invoice-dollar" aria-hidden="true"></i> Dane finansowo-leasingowe</p>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-lease-provider">Leasingodawca</label>
+              <input type="text" id="dev-lease-provider" class="form-control" placeholder="np. Grenke, EFL, mLeasing">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-device-value">Wartość początkowa (PLN)</label>
+              <input type="number" id="dev-device-value" class="form-control" placeholder="np. 5000" min="0" step="0.01">
+            </div>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-lease-cost-expected">
+                Rata oczekiwana/mies. netto (PLN)
+                <span title="Kwota z umowy leasingowej" style="cursor: help; color: var(--color-info); margin-left: 0.2rem;">
+                  <i class="fas fa-question-circle" aria-hidden="true"></i>
+                </span>
+              </label>
+              <input type="number" id="dev-lease-cost-expected" class="form-control" placeholder="np. 150" min="0" step="0.01">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-lease-cost-actual">
+                Rata rzeczywista/mies. netto (PLN)
+                <span title="Kwota z faktury" style="cursor: help; color: var(--color-info); margin-left: 0.2rem;">
+                  <i class="fas fa-question-circle" aria-hidden="true"></i>
+                </span>
+              </label>
+              <input type="number" id="dev-lease-cost-actual" class="form-control" placeholder="np. 150" min="0" step="0.01">
+              <span class="form-hint"><i class="fas fa-exclamation-triangle" style="color: var(--color-warning);"></i> Różnica między oczekiwaną a rzeczywistą = rozbieżność finansowa</span>
+            </div>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="dev-lease-start">Data rozpoczęcia leasingu</label>
+              <input type="date" id="dev-lease-start" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="dev-lease-end">Data zakończenia leasingu</label>
+              <input type="date" id="dev-lease-end" class="form-control">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="dev-notes">Uwagi leasingowe / administracyjne</label>
+            <textarea id="dev-notes" class="form-control" placeholder="np. numer umowy, dodatkowe informacje..." rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-device', 'close')">Anuluj</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save" aria-hidden="true"></i> Zapisz urządzenie
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Issue Loan -->
+  <div class="modal-overlay" id="modal-loan" role="dialog" aria-modal="true" aria-labelledby="modal-loan-title">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 id="modal-loan-title"><i class="fas fa-handshake" style="color: var(--accent-indigo); margin-right: 0.4rem;" aria-hidden="true"></i> Wydanie Sprzętu</h2>
+        <button class="modal-close" onclick="toggleModal('modal-loan', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="loan-form" novalidate>
+        <div class="modal-body">
+          <div class="loan-alert-box" role="status">
+            <h4><i class="fas fa-laptop" style="margin-right: 0.3rem;" aria-hidden="true"></i> Wybrany Sprzęt:</h4>
+            <p id="loan-device-info" style="font-weight: 700; color: var(--accent-indigo); font-size: 1rem;"></p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="loan-name">
+              Imię i Nazwisko pracownika <span class="required-star" aria-hidden="true">*</span>
+            </label>
+            <input type="text" id="loan-name" class="form-control" placeholder="np. Jan Kowalski" required
+                   autocomplete="name" aria-required="true">
+            <span class="error-msg" id="loan-name-error" role="alert">Wpisz pełne imię i nazwisko (min. 3 znaki).</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="loan-email">
+              Adres e-mail pracownika <span class="required-star" aria-hidden="true">*</span>
+            </label>
+            <input type="email" id="loan-email" class="form-control" placeholder="np. jan.kowalski@firma.pl" required
+                   autocomplete="email" aria-required="true">
+            <span class="error-msg" id="loan-email-error" role="alert">Podaj poprawny adres e-mail.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="loan-dept">
+              Dział / Departament <span class="required-star" aria-hidden="true">*</span>
+            </label>
+            <input type="text" id="loan-dept" class="form-control" placeholder="np. Marketing, R&D, HR" required
+                   autocomplete="organization-title" aria-required="true">
+            <span class="error-msg" id="loan-dept-error" role="alert">Podaj nazwę działu.</span>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="loan-date">
+                Data wydania <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="date" id="loan-date" class="form-control" required aria-required="true">
+              <span class="error-msg" id="loan-date-error" role="alert">Data wydania jest wymagana.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="loan-return-date">
+                Planowany zwrot <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="date" id="loan-return-date" class="form-control" required aria-required="true">
+              <span class="error-msg" id="loan-return-error" role="alert">Data zwrotu musi być późniejsza niż wydania.</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-loan', 'close')">Anuluj</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-check" aria-hidden="true"></i> Potwierdź wydanie
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Return Loan -->
+  <div class="modal-overlay" id="modal-return" role="dialog" aria-modal="true" aria-labelledby="modal-return-title">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 id="modal-return-title"><i class="fas fa-undo-alt" style="color: var(--color-success); margin-right: 0.4rem;" aria-hidden="true"></i> Rejestracja Zwrotu</h2>
+        <button class="modal-close" onclick="toggleModal('modal-return', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="return-form" novalidate>
+        <div class="modal-body">
+          <div class="loan-alert-box" style="background: rgba(16,185,129,0.07); border-color: rgba(16,185,129,0.30);" role="status">
+            <h4><i class="fas fa-laptop" style="margin-right: 0.3rem;" aria-hidden="true"></i> Zwracane urządzenie:</h4>
+            <p id="return-device-info" style="font-weight: 700; color: var(--color-success); font-size: 0.95rem;"></p>
+            <p id="return-borrower-info" style="font-size: 0.8rem; margin-top: 0.25rem; color: var(--text-muted);"></p>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="return-date">
+                Faktyczna data zwrotu <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="date" id="return-date" class="form-control" required aria-required="true">
+              <span class="error-msg" id="return-date-error" role="alert">Data zwrotu jest wymagana.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="return-condition">
+                Stan zwracanego sprzętu <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <select id="return-condition" class="form-control" required aria-required="true">
+                <option value="good">Sprawny — gotowy do ponownego wydania</option>
+                <option value="damaged">Uszkodzony — wymaga serwisu</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="return-notes">Opis uszkodzeń / uwagi do zwrotu</label>
+            <textarea id="return-notes" class="form-control" rows="2"
+                      placeholder="Wpisz uwagi o stanie sprzętu lub opis uszkodzenia..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-return', 'close')">Anuluj</button>
+          <button type="submit" class="btn btn-success">
+            <i class="fas fa-check-double" aria-hidden="true"></i> Zarejestruj zwrot
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirm Transfer Delivery -->
+  <div class="modal-overlay" id="modal-confirm-transfer" role="dialog" aria-modal="true" aria-labelledby="modal-transfer-title">
+    <div class="modal-container">
+      <div class="modal-header" style="border-bottom-color: rgba(6,182,212,0.20);">
+        <h2 id="modal-transfer-title" style="display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-truck-ramp-box" style="color: var(--color-info);" aria-hidden="true"></i> Potwierdzenie Odbioru
+        </h2>
+        <button class="modal-close" onclick="toggleModal('modal-confirm-transfer', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="confirm-transfer-form" novalidate>
+        <div class="modal-body">
+          <div class="loan-alert-box" style="background: rgba(6,182,212,0.07); border-color: rgba(6,182,212,0.30);" role="status">
+            <h4><i class="fas fa-truck" style="margin-right: 0.3rem;" aria-hidden="true"></i> Odbierane urządzenie:</h4>
+            <p id="confirm-transfer-device-info" style="font-weight: 700; color: var(--color-info);"></p>
+            <p id="confirm-transfer-route-info" style="font-size: 0.8rem; margin-top: 0.25rem; color: var(--text-muted);"></p>
+          </div>
+
+          <div class="form-group-row">
+            <div class="form-group">
+              <label class="form-label" for="confirm-transfer-date">
+                Data odbioru <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <input type="date" id="confirm-transfer-date" class="form-control" required aria-required="true">
+              <span class="error-msg" id="transfer-date-error" role="alert">Data odbioru jest wymagana.</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="confirm-transfer-condition">
+                Stan sprzętu po transporcie <span class="required-star" aria-hidden="true">*</span>
+              </label>
+              <select id="confirm-transfer-condition" class="form-control" aria-required="true">
+                <option value="good">Sprawny — bez uszkodzeń</option>
+                <option value="damaged">Uszkodzony — uszkodzenia w transporcie</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="confirm-transfer-notes">Opis stanu / uwagi do odbioru</label>
+            <textarea id="confirm-transfer-notes" class="form-control" rows="2"
+                      placeholder="Uwagi odnośnie stanu sprzętu, opakowania..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-confirm-transfer', 'close')">Anuluj</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-check-circle" aria-hidden="true"></i> Zatwierdź odbiór
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Device Loan History -->
+  <div class="modal-overlay" id="modal-history" role="dialog" aria-modal="true" aria-labelledby="modal-history-title">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h2 id="modal-history-title"><i class="fas fa-history" style="color: var(--accent-indigo); margin-right: 0.4rem;" aria-hidden="true"></i> Historia Wypożyczeń</h2>
+        <button class="modal-close" onclick="toggleModal('modal-history', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="loan-alert-box" style="background: rgba(6,182,212,0.07); border-color: rgba(6,182,212,0.25);">
+          <h4 style="font-size: 0.8rem; color: var(--text-muted);">Urządzenie:</h4>
+          <p id="history-device-info" style="font-weight: 700; color: var(--color-info); font-size: 0.95rem;"></p>
+        </div>
+        <ul id="device-history-list" style="padding-left: 0;" role="list" aria-label="Lista historii wypożyczeń urządzenia"></ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-history', 'close')">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirm Delete -->
+  <div class="modal-overlay" id="modal-confirm-delete" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+    <div class="modal-container" style="max-width: 450px;">
+      <div class="modal-header" style="border-bottom-color: rgba(239,68,68,0.20);">
+        <h2 id="modal-delete-title" style="color: var(--color-danger); display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Potwierdź usunięcie
+        </h2>
+        <button class="modal-close" onclick="toggleModal('modal-confirm-delete', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem; font-size: 0.9rem; line-height: 1.6; color: var(--text-primary);">
+          Czy na pewno chcesz bezpowrotnie usunąć to urządzenie z bazy danych?
+          <strong style="color: var(--color-danger);">Ta operacja jest nieodwracalna.</strong>
+        </p>
+        <div class="loan-alert-box" style="background: rgba(239,68,68,0.06); border-color: rgba(239,68,68,0.25);">
+          <p id="delete-device-info" style="font-weight: 700; color: var(--color-danger); font-size: 0.95rem;"></p>
+        </div>
+        <div class="form-group" style="margin-top: 1.25rem;">
+          <label class="form-label" for="delete-confirm-input">
+            Wpisz słowo <strong style="color: var(--color-danger); font-family: monospace;">USUŃ</strong> aby odblokować przycisk:
+          </label>
+          <input type="text" id="delete-confirm-input" class="form-control"
+                 placeholder='Wpisz "USUŃ"'
+                 style="border-color: rgba(239,68,68,0.35); text-align: center; font-weight: 700; font-size: 1rem; letter-spacing: 2px;"
+                 aria-label="Potwierdzenie usunięcia — wpisz USUŃ">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-confirm-delete', 'close')">Anuluj</button>
+        <button type="button" class="btn btn-danger" id="delete-confirm-btn" disabled
+                style="opacity: 0.45; cursor: not-allowed;">
+          <i class="fas fa-trash" aria-hidden="true"></i> Usuń urządzenie
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Change Password -->
+  <div class="modal-overlay" id="modal-change-password" role="dialog" aria-modal="true" aria-labelledby="modal-password-title">
+    <div class="modal-container" style="max-width: 420px;">
+      <div class="modal-header">
+        <h2 id="modal-password-title" style="display: flex; align-items: center; gap: 0.5rem;">
+          <i class="fas fa-key" style="color: var(--accent-indigo);" aria-hidden="true"></i> Zmień hasło konta
+        </h2>
+        <button class="modal-close" onclick="toggleModal('modal-change-password', 'close')" aria-label="Zamknij">
+          <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+      </div>
+      <form id="change-password-form" novalidate>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="change-old-password">Aktualne hasło <span class="required-star">*</span></label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <input type="password" id="change-old-password" class="form-control" placeholder="Wprowadź aktualne hasło" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="change-new-password">Nowe hasło <small style="font-weight: 400; color: var(--text-muted);">(min. 6 znaków)</small> <span class="required-star">*</span></label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <input type="password" id="change-new-password" class="form-control" placeholder="Nowe hasło" required minlength="6">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="change-confirm-password">Potwierdź nowe hasło <span class="required-star">*</span></label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <input type="password" id="change-confirm-password" class="form-control" placeholder="Powtórz nowe hasło" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="toggleModal('modal-change-password', 'close')">Anuluj</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save" aria-hidden="true"></i> Zapisz hasło
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTH OVERLAY
+  ═══════════════════════════════════════════════════════════ -->
+  <div id="auth-overlay" class="auth-overlay active" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+    <div class="auth-card" role="document">
+      <div class="auth-header">
+        <div class="brand-icon" style="margin: 0 auto 1.1rem auto; width: 50px; height: 50px;">
+          <i class="fas fa-laptop-house" style="font-size: 1.4rem; color: #fff;" aria-hidden="true"></i>
+        </div>
+        <h2 id="auth-title">Zaloguj się do IT Lease Hub</h2>
+        <p id="auth-subtitle">Wprowadź dane dostępowe do systemu</p>
+      </div>
+
+      <!-- Login Form -->
+      <form id="auth-login-form" class="auth-form active" novalidate aria-label="Formularz logowania">
+        <div class="form-group">
+          <label class="form-label" for="login-email">Adres E-mail</label>
+          <div class="input-with-icon">
+            <i class="fas fa-envelope" aria-hidden="true"></i>
+            <input type="email" id="login-email" class="form-control" placeholder="np. admin@firma.pl"
+                   required autocomplete="email" aria-required="true">
+          </div>
+          <span class="error-msg" id="login-email-error" role="alert"></span>
+        </div>
+
+        <div class="form-group" style="margin-top: 1.1rem;">
+          <label class="form-label" for="login-password">Hasło</label>
+          <div class="input-with-icon">
+            <i class="fas fa-lock" aria-hidden="true"></i>
+            <input type="password" id="login-password" class="form-control" placeholder="Wprowadź hasło"
+                   required autocomplete="current-password" aria-required="true">
+          </div>
+          <span class="error-msg" id="login-password-error" role="alert"></span>
+        </div>
+
+        <button type="submit" class="btn btn-primary"
+                style="width: 100%; margin-top: 1.5rem; padding: 0.85rem; border-radius: 12px; font-size: 0.95rem;">
+          <i class="fas fa-sign-in-alt" aria-hidden="true"></i> Zaloguj się
+        </button>
+
+        <div class="auth-divider">Lub</div>
+
+        <div style="text-align: center; font-size: 0.85rem; color: var(--text-muted);">
+          Nie masz konta? <a href="#" id="go-to-register-btn"
+            style="color: var(--accent-indigo); text-decoration: none; font-weight: 600;">Utwórz konto</a>
+        </div>
+        <div style="text-align: center; margin-top: 0.75rem;">
+          <a href="#" id="go-to-forgot-btn"
+            style="color: var(--text-muted); text-decoration: none; font-size: 0.8rem; font-weight: 500;">
+            Zapomniałeś hasła? Resetuj
+          </a>
+        </div>
+      </form>
+
+      <!-- Register Form -->
+      <form id="auth-register-form" class="auth-form" novalidate aria-label="Formularz rejestracji">
+        <div class="form-group">
+          <label class="form-label" for="register-name">Imię i Nazwisko</label>
+          <div class="input-with-icon">
+            <i class="fas fa-user" aria-hidden="true"></i>
+            <input type="text" id="register-name" class="form-control" placeholder="np. Andrzej Kowalski"
+                   required autocomplete="name">
+          </div>
+          <span class="error-msg" id="register-name-error" role="alert"></span>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.9rem;">
+          <label class="form-label" for="register-email">Adres E-mail</label>
+          <div class="input-with-icon">
+            <i class="fas fa-envelope" aria-hidden="true"></i>
+            <input type="email" id="register-email" class="form-control" placeholder="np. andrzej.k@firma.pl"
+                   required autocomplete="email">
+          </div>
+          <span class="error-msg" id="register-email-error" role="alert"></span>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.9rem;">
+          <label class="form-label" for="register-password">Hasło (min. 6 znaków)</label>
+          <div class="input-with-icon">
+            <i class="fas fa-lock" aria-hidden="true"></i>
+            <input type="password" id="register-password" class="form-control" placeholder="Wprowadź hasło"
+                   required minlength="6" autocomplete="new-password">
+          </div>
+          <span class="error-msg" id="register-password-error" role="alert"></span>
+        </div>
+
+        <div class="form-group" style="margin-top: 0.9rem;">
+          <label class="form-label" for="register-role">Rola w systemie</label>
+          <div class="input-with-icon">
+            <i class="fas fa-user-tag" aria-hidden="true"></i>
+            <select id="register-role" class="form-control">
+              <option value="it">Pracownik IT (IT Worker)</option>
+              <option value="accountant">Księgowość (Accountant)</option>
+              <option value="admin">Administrator IT (Admin)</option>
+            </select>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary"
+                style="width: 100%; margin-top: 1.5rem; padding: 0.85rem; border-radius: 12px; font-size: 0.95rem;">
+          <i class="fas fa-user-plus" aria-hidden="true"></i> Zarejestruj się
+        </button>
+
+        <div style="text-align: center; margin-top: 1.1rem; font-size: 0.85rem; color: var(--text-muted);">
+          Masz już konto? <a href="#" id="go-to-login-btn"
+            style="color: var(--accent-indigo); text-decoration: none; font-weight: 600;">Zaloguj się</a>
+        </div>
+      </form>
+
+      <!-- Forgot Password Form -->
+      <form id="auth-forgot-form" class="auth-form" novalidate aria-label="Formularz resetowania hasła">
+        <!-- Step 1: Email input -->
+        <div id="forgot-step-1">
+          <div class="form-group">
+            <label class="form-label" for="forgot-email">Adres E-mail konta</label>
+            <div class="input-with-icon">
+              <i class="fas fa-envelope" aria-hidden="true"></i>
+              <input type="email" id="forgot-email" class="form-control" placeholder="np. andrzej.k@firma.pl"
+                     autocomplete="email">
+            </div>
+            <span class="error-msg" id="forgot-email-error" role="alert"></span>
+          </div>
+          <button type="button" id="forgot-next-btn" class="btn btn-primary"
+                  style="width: 100%; margin-top: 1.5rem; padding: 0.85rem; border-radius: 12px;">
+            Wyślij kod resetujący <i class="fas fa-paper-plane" style="margin-left: 0.25rem;" aria-hidden="true"></i>
+          </button>
+        </div>
+
+        <!-- Step 2: Code + new password + confirm password -->
+        <div id="forgot-step-2" style="display: none;">
+          <div class="loan-alert-box" style="background: rgba(99,102,241,0.07); border-color: rgba(99,102,241,0.25); margin-bottom: 1.1rem; padding: 0.8rem;">
+            <i class="fas fa-info-circle" style="color: var(--accent-indigo); margin-right: 0.35rem;" aria-hidden="true"></i>
+            <span style="font-size: 0.82rem; color: #fff; font-weight: 500;">Kod resetujący został wysłany na Twój e-mail. Wprowadź go poniżej wraz z nowym hasłem.</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="forgot-code">Kod resetujący (6 cyfr)</label>
+            <div class="input-with-icon">
+              <i class="fas fa-key" aria-hidden="true"></i>
+              <input type="text" id="forgot-code" class="form-control" placeholder="np. 123456" maxlength="6" pattern="\d{6}">
+            </div>
+            <span class="error-msg" id="forgot-code-error" role="alert"></span>
+          </div>
+
+          <div class="form-group" style="margin-top: 0.9rem;">
+            <label class="form-label" for="forgot-new-password">Nowe Hasło (min. 6 znaków)</label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <input type="password" id="forgot-new-password" class="form-control" placeholder="Wprowadź nowe hasło">
+            </div>
+            <span class="error-msg" id="forgot-password-error" role="alert"></span>
+          </div>
+
+          <div class="form-group" style="margin-top: 0.9rem;">
+            <label class="form-label" for="forgot-confirm-password">Potwierdź Nowe Hasło</label>
+            <div class="input-with-icon">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <input type="password" id="forgot-confirm-password" class="form-control" placeholder="Powtórz nowe hasło">
+            </div>
+            <span class="error-msg" id="forgot-confirm-password-error" role="alert"></span>
+          </div>
+
+          <button type="submit" class="btn btn-success"
+                  style="width: 100%; margin-top: 1.5rem; padding: 0.85rem; border-radius: 12px;">
+            <i class="fas fa-check" aria-hidden="true"></i> Zapisz nowe hasło
+          </button>
+        </div>
+
+        <div style="text-align: center; margin-top: 1.1rem;">
+          <a href="#" id="go-back-to-login-btn"
+            style="color: var(--accent-indigo); text-decoration: none; font-size: 0.85rem; font-weight: 600;">
+            <i class="fas fa-arrow-left" style="margin-right: 0.2rem;" aria-hidden="true"></i> Powrót do logowania
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notifications Container -->
+  <div id="toast-container" class="toast-container" role="region" aria-live="polite" aria-label="Powiadomienia"></div>
+
+  <!-- Application JS -->
+  <script src="app.js"></script>
+</body>
+</html>
